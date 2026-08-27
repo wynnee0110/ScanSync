@@ -150,28 +150,10 @@ export function DatePickerModal({
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.modalCard}>
-          {/* Header Bar */}
-          <View style={styles.headerBar}>
-            <Pressable
-              onPress={onClose}
-              hitSlop={8}
-              style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-
-            <Text style={styles.headerTitle}>Select Date</Text>
-
-            <Pressable
-              onPress={handleConfirm}
-              hitSlop={8}
-              style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
-              <Text style={styles.doneText}>Done</Text>
-            </Pressable>
-          </View>
-
-          {/* Date Preview Banner */}
-          <View style={styles.previewContainer}>
-            <Text style={styles.previewDateText}>{displayDateText}</Text>
+          {/* Android Material Header Banner */}
+          <View style={styles.materialHeader}>
+            <Text style={styles.materialHeaderLabel}>SELECT DATE</Text>
+            <Text style={styles.materialHeaderValue}>{displayDateText}</Text>
           </View>
 
           {/* Month Navigation */}
@@ -186,7 +168,7 @@ export function DatePickerModal({
                 accessibilityLabel="Previous month"
                 onPress={prevMonth}
                 style={({ pressed }) => [styles.navArrowBtn, pressed && styles.pressed]}>
-                <Ionicons name="chevron-back" size={16} color={Palette.text} />
+                <Ionicons name="chevron-back" size={18} color={Palette.text} />
               </Pressable>
 
               <Pressable
@@ -194,7 +176,7 @@ export function DatePickerModal({
                 accessibilityLabel="Next month"
                 onPress={nextMonth}
                 style={({ pressed }) => [styles.navArrowBtn, pressed && styles.pressed]}>
-                <Ionicons name="chevron-forward" size={16} color={Palette.text} />
+                <Ionicons name="chevron-forward" size={18} color={Palette.text} />
               </Pressable>
             </View>
           </View>
@@ -248,88 +230,72 @@ export function DatePickerModal({
               );
             })}
           </View>
+
+          {/* Android Material Dialog Action Buttons (CANCEL / OK) */}
+          <View style={styles.actionRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onClose}
+              style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}>
+              <Text style={styles.actionButtonText}>CANCEL</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleConfirm}
+              style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}>
+              <Text style={[styles.actionButtonText, styles.actionButtonPrimary]}>OK</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </Modal>
   );
 }
 
-// ─── Fixed-Size Modern Styles ────────────────────────────────────────────────
+// ─── Fixed-Size Android Material Styles ────────────────────────────────────────
 
 const CELL_SIZE = 38;
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.54)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
   },
 
   modalCard: {
-    width: 340,
-    height: 480,
+    width: 330,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 28,
+    elevation: 12,
   },
 
-  headerBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Palette.border,
+  materialHeader: {
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 24,
+    paddingTop: 18,
+    paddingBottom: 18,
   },
 
-  headerTitle: {
-    fontSize: 16,
+  materialHeaderLabel: {
+    fontSize: 11,
     fontWeight: '700',
-    color: Palette.text,
-    letterSpacing: -0.3,
+    color: '#94A3B8',
+    letterSpacing: 1.2,
+    marginBottom: 4,
   },
 
-  headerBtn: {
-    paddingVertical: 4,
-  },
-
-  cancelText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: Palette.textSecondary,
-  },
-
-  doneText: {
-    fontSize: 15,
+  materialHeaderValue: {
+    fontSize: 22,
     fontWeight: '700',
-    color: Palette.text,
-  },
-
-  previewContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    backgroundColor: Palette.background,
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Palette.borderLight,
-  },
-
-  previewDateText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Palette.text,
+    color: '#FFFFFF',
     letterSpacing: -0.2,
   },
 
@@ -338,7 +304,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginVertical: 4,
+    marginTop: 14,
+    marginBottom: 6,
   },
 
   monthTitle: {
@@ -351,13 +318,13 @@ const styles = StyleSheet.create({
   navButtonsGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
 
   navArrowBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: Palette.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
@@ -366,15 +333,15 @@ const styles = StyleSheet.create({
   weekHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 14,
-    marginTop: 6,
+    paddingHorizontal: 12,
+    marginTop: 4,
     marginBottom: 4,
   },
 
   weekHeaderCell: {
     width: CELL_SIZE,
     textAlign: 'center',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: Palette.textMuted,
   },
@@ -383,9 +350,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-around',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     rowGap: 2,
-    height: CELL_SIZE * 6 + 12, // Exact fixed height for 6 rows
+    height: CELL_SIZE * 6 + 12,
   },
 
   dayCell: {
@@ -406,12 +373,12 @@ const styles = StyleSheet.create({
 
   dayCircleToday: {
     borderWidth: 1.5,
-    borderColor: Palette.successText,
+    borderColor: '#0284C7',
     borderRadius: 18,
   },
 
   dayCircleSelected: {
-    backgroundColor: Palette.text,
+    backgroundColor: '#0284C7',
     borderRadius: 18,
   },
 
@@ -422,13 +389,41 @@ const styles = StyleSheet.create({
   },
 
   dayTextToday: {
-    color: Palette.successText,
+    color: '#0284C7',
     fontWeight: '700',
   },
 
   dayTextSelected: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Palette.borderLight,
+  },
+
+  actionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Palette.textSecondary,
+    letterSpacing: 0.5,
+  },
+
+  actionButtonPrimary: {
+    color: '#0284C7',
   },
 
   pressed: {

@@ -177,28 +177,10 @@ export function TimePickerModal({
       onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.modalCard}>
-          {/* Header Bar */}
-          <View style={styles.headerBar}>
-            <Pressable
-              onPress={onClose}
-              hitSlop={8}
-              style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-
-            <Text style={styles.headerTitle}>Select Time</Text>
-
-            <Pressable
-              onPress={handleConfirm}
-              hitSlop={8}
-              style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
-              <Text style={styles.doneText}>Done</Text>
-            </Pressable>
-          </View>
-
-          {/* Time Display Sub-header */}
-          <View style={styles.previewContainer}>
-            <Text style={styles.previewTimeText}>{displayTime}</Text>
+          {/* Android Material Header Banner */}
+          <View style={styles.materialHeader}>
+            <Text style={styles.materialHeaderLabel}>SELECT TIME</Text>
+            <Text style={styles.materialHeaderValue}>{displayTime}</Text>
           </View>
 
           {/* Wheel Picker Container */}
@@ -246,86 +228,70 @@ export function TimePickerModal({
               />
             </View>
           </View>
+
+          {/* Android Material Dialog Action Buttons (CANCEL / OK) */}
+          <View style={styles.actionRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onClose}
+              style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}>
+              <Text style={styles.actionButtonText}>CANCEL</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleConfirm}
+              style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}>
+              <Text style={[styles.actionButtonText, styles.actionButtonPrimary]}>OK</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </Modal>
   );
 }
 
-// ─── Fixed-Size Modern Styles ────────────────────────────────────────────────
+// ─── Fixed-Size Android Material Styles ────────────────────────────────────────
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.54)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
   },
 
   modalCard: {
-    width: 340,
-    height: 350,
+    width: 330,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 28,
+    elevation: 12,
   },
 
-  headerBar: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Palette.border,
+  materialHeader: {
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 24,
+    paddingTop: 18,
+    paddingBottom: 18,
   },
 
-  headerTitle: {
-    fontSize: 16,
+  materialHeaderLabel: {
+    fontSize: 11,
     fontWeight: '700',
-    color: Palette.text,
-    letterSpacing: -0.3,
-  },
-
-  headerBtn: {
-    paddingVertical: 4,
-  },
-
-  cancelText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: Palette.textSecondary,
-  },
-
-  doneText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Palette.text,
-  },
-
-  previewContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    backgroundColor: Palette.background,
-    marginHorizontal: 16,
-    marginTop: 12,
+    color: '#94A3B8',
+    letterSpacing: 1.2,
     marginBottom: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Palette.borderLight,
   },
 
-  previewTimeText: {
-    fontSize: 17,
+  materialHeaderValue: {
+    fontSize: 26,
     fontWeight: '700',
-    color: Palette.text,
+    color: '#FFFFFF',
     letterSpacing: -0.2,
   },
 
@@ -333,6 +299,7 @@ const styles = StyleSheet.create({
     height: WHEEL_HEIGHT,
     position: 'relative',
     marginHorizontal: 16,
+    marginVertical: 10,
   },
 
   selectionHighlight: {
@@ -342,7 +309,7 @@ const styles = StyleSheet.create({
     top: ITEM_HEIGHT * 2,
     height: ITEM_HEIGHT,
     borderRadius: 10,
-    backgroundColor: Palette.borderLight,
+    backgroundColor: '#E0F2FE',
   },
 
   wheelsRow: {
@@ -364,10 +331,10 @@ const styles = StyleSheet.create({
   },
 
   colonSeparator: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: Palette.text,
-    marginHorizontal: 2,
+    marginHorizontal: 4,
   },
 
   wheelText: {
@@ -377,9 +344,37 @@ const styles = StyleSheet.create({
   },
 
   wheelTextSelected: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
-    color: Palette.text,
+    color: '#0284C7',
+  },
+
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Palette.borderLight,
+  },
+
+  actionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Palette.textSecondary,
+    letterSpacing: 0.5,
+  },
+
+  actionButtonPrimary: {
+    color: '#0284C7',
   },
 
   pressed: {
