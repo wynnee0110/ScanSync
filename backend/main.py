@@ -16,10 +16,13 @@ Dev health check:
     curl http://localhost:8000/health
 """
 
+import asyncio
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from typing import Annotated
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -52,6 +55,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Render Keep-Alive Background Task
+# ---------------------------------------------------------------------------
+async def _self_ping_loop():
+    """Background task that pings the Render service every 10 minutes to prevent sleep."""
+    await asyncio.sleep(15)  # Wait 15s after startup before first ping
+    url = "https://scansync-lius.onrender.com/health"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        while True:
+            try:
+                res = await client.get(url)
+                logger.info("[Keep-Alive] Self-ping to %s -> %d", url, res.status_code)
+            except Exception as exc:
+                logger.warning("[Keep-Alive] Notice pinging %s: %s", url, exc)
+            await asyncio.sleep(600)  # Ping every 10 minutes (600s)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    ping_task = asyncio.create_task(_self_ping_loop())
+    yield
+    ping_task.cancel()
+
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -61,6 +89,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
