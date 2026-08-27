@@ -19,6 +19,7 @@ Usage in route handlers:
 """
 
 import logging
+import os
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Security, status
