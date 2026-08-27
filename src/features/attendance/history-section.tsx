@@ -204,23 +204,25 @@ export function HistorySection({ items, events, onChanged }: HistorySectionProps
     const participantName = editName.trim().replace(/\s+/g, ' ');
     const participantProgram = editProgram.trim().replace(/\s+/g, ' ');
 
+    const isSchoolId = editItem.qrFormat !== 'opaque';
+
     if (
-      (editItem.qrFormat === 'school_id' && !/^\d{10}$/.test(participantReference)) ||
+      (isSchoolId && !/^\d{10}$/.test(participantReference)) ||
       (editItem.qrFormat === 'opaque' && participantReference.length < 6)
     ) {
       setEditError(
-        editItem.qrFormat === 'school_id'
+        isSchoolId
           ? 'Student ID must contain exactly 10 digits.'
           : 'Participant reference must contain at least 6 characters.',
       );
       return;
     }
-    if (editItem.qrFormat === 'school_id' && participantName.length < 2) {
+    if (isSchoolId && participantName.length < 2) {
       setEditError('Student name must contain at least 2 characters.');
       return;
     }
     if (
-      editItem.qrFormat === 'school_id' &&
+      isSchoolId &&
       !/^[A-Za-z0-9 .&()+\/-]{2,32}$/.test(participantProgram)
     ) {
       setEditError('Enter a valid program code between 2 and 32 characters.');

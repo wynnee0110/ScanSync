@@ -160,12 +160,24 @@ async function getOrCreateParticipantId(
 
   const { data: existing } = await supabase
     .from('participants')
-    .select('id')
+    .select('id, display_name, program_code')
     .eq('event_id', eventId)
     .eq('external_reference', participantReference)
     .maybeSingle();
 
   if (existing?.id) {
+    if (
+      (name && name !== existing.display_name) ||
+      (program && program !== existing.program_code)
+    ) {
+      await supabase
+        .from('participants')
+        .update({
+          display_name: name || existing.display_name,
+          program_code: program || existing.program_code,
+        })
+        .eq('id', existing.id);
+    }
     return existing.id;
   }
 
