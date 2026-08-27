@@ -34,8 +34,9 @@ CSV_FIELDNAMES = [
     "program_course",
     "email",
     "year_level",
-    "method",
+    "check_in_time",
     "recorded_at",
+    "method",
     "recorded_by",
     "event_name",
     "event_date",
@@ -179,6 +180,15 @@ def fetch_attendance_rows(supabase_client, event_id: str) -> list[dict]:
             or ""
         )
 
+        raw_recorded_at = r.get("recorded_at", "")
+        check_in_time = ""
+        if raw_recorded_at:
+            try:
+                dt = datetime.fromisoformat(raw_recorded_at.replace("Z", "+00:00"))
+                check_in_time = dt.strftime("%Y-%m-%d %I:%M:%S %p")
+            except Exception:
+                check_in_time = raw_recorded_at
+
         flat.append({
             "record_id": r.get("id", ""),
             "participant_name": participant.get("display_name", ""),
@@ -186,8 +196,9 @@ def fetch_attendance_rows(supabase_client, event_id: str) -> list[dict]:
             "program_course": program_val,
             "email": participant.get("email") or "",
             "year_level": r.get("year_level") or "",
+            "check_in_time": check_in_time,
+            "recorded_at": raw_recorded_at,
             "method": r.get("method", ""),
-            "recorded_at": r.get("recorded_at", ""),
             "recorded_by": recorder.get("full_name", ""),
             "event_name": event_meta.get("name", ""),
             "event_date": event_date,
