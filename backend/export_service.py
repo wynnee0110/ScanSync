@@ -188,10 +188,12 @@ def fetch_attendance_rows(supabase_client, event_id: str) -> list[dict]:
             except Exception:
                 formatted_recorded_at = raw_recorded_at
 
+        student_id_val = (participant.get("external_reference") or "").replace("-", "")
+
         flat.append({
             "record_id": r.get("id", ""),
             "participant_name": participant.get("display_name", ""),
-            "student_id": participant.get("external_reference") or "",
+            "student_id": student_id_val,
             "program_course": program_val,
             "email": participant.get("email") or "",
             "year_level": r.get("year_level") or "",

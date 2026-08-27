@@ -68,7 +68,7 @@ MOCK_ROWS = [
     {
         "record_id": "rec-001",
         "participant_name": "Juan Dela Cruz",
-        "student_id": "2023-10492",
+        "student_id": "2023104921",
         "email": "juan@example.com",
         "year_level": 2,
         "method": "qr",
@@ -80,7 +80,7 @@ MOCK_ROWS = [
     {
         "record_id": "rec-002",
         "participant_name": "Maria Santos",
-        "student_id": "2022-88491",
+        "student_id": "2022884912",
         "email": "maria@example.com",
         "year_level": 3,
         "method": "qr",
@@ -92,7 +92,7 @@ MOCK_ROWS = [
     {
         "record_id": "rec-003",
         "participant_name": "Carlos Reyes",
-        "student_id": "2024-55102",
+        "student_id": "2024551023",
         "email": None,
         "year_level": 1,
         "method": "manual",
@@ -104,7 +104,7 @@ MOCK_ROWS = [
     {
         "record_id": "rec-004",
         "participant_name": "Ana Torres",
-        "student_id": "2021-44182",
+        "student_id": "2021441824",
         "email": "ana@example.com",
         "year_level": 4,
         "method": "qr",
