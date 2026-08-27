@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DatePickerModal } from '@/components/date-picker-modal';
 import { TimePickerModal } from '@/components/time-picker-modal';
 import { Palette } from '@/constants/palette';
+import { SELECTED_EVENT_KEY, setPreference } from '@/lib/preferences';
 import { HistorySection } from '@/features/attendance/history-section';
 import { EventChartsOverview } from '@/features/charts/event-charts-overview';
 import {
@@ -538,7 +539,10 @@ export function EventDetailScreen({ eventId }: EventDetailScreenProps) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Scan for this event"
-              onPress={() => router.push('/(tabs)/scan')}
+              onPress={() => {
+                void setPreference(SELECTED_EVENT_KEY, eventId);
+                router.push('/(tabs)/scan');
+              }}
               style={({ pressed }) => [styles.primaryScanBtn, pressed && styles.pressed]}>
               <Ionicons name="qr-code-outline" size={18} color="#FFFFFF" />
               <Text style={styles.primaryScanBtnText}>Open Scanner</Text>

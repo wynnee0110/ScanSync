@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useAudioPlayer } from 'expo-audio';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, useFocusEffect } from 'expo-router';
@@ -7,9 +8,10 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from 'react-native';
 
 import { Palette } from '@/constants/palette';
@@ -29,7 +31,7 @@ import {
   type ScannerOverlayProps,
 } from '@/features/scan/scanner-overlay';
 import { ScannerVerificationPill } from '@/features/scan/scanner-verification-pill';
-import { getPreference, SELECTED_EVENT_KEY } from '@/lib/preferences';
+import { getPreference, SELECTED_EVENT_KEY, setPreference } from '@/lib/preferences';
 
 type ScanFeedback = {
   tone: 'idle' | 'success' | 'warning' | 'error';
@@ -57,6 +59,7 @@ export function ScannerScreen() {
   const [savingAttendance, setSavingAttendance] = useState(false);
   const [torch, setTorch] = useState(false);
   const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
+  const [selectorOpen, setSelectorOpen] = useState(false);
   const scanLock = useRef(false);
   const autoResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -135,7 +138,7 @@ export function ScannerScreen() {
       });
       setEvents(activeEvents);
       setSelectedEventId((current) => {
-        const preferred = current ?? storedEventId;
+        const preferred = storedEventId ?? current;
         return preferred && activeEvents.some((event) => event.id === preferred)
           ? preferred
           : (activeEvents[0]?.id ?? null);
@@ -414,9 +417,16 @@ export function ScannerScreen() {
     Platform.OS === 'web' && typeof window !== 'undefined' && !window.isSecureContext;
 
   const overlayHeader = selectedEvent ? (
-    <Text style={styles.eventTitleText} numberOfLines={1}>
-      {selectedEvent.name}
-    </Text>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Change event, currently ${selectedEvent.name}`}
+      onPress={() => setSelectorOpen(true)}
+      style={({ pressed }) => [styles.headerEventSelectorBtn, pressed && styles.pressed]}>
+      <Text style={styles.eventTitleText} numberOfLines={1}>
+        {selectedEvent.name}
+      </Text>
+      <Ionicons name="chevron-down" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
+    </Pressable>
   ) : undefined;
 
   const overlayProps: ScannerOverlayProps = {
@@ -575,7 +585,55 @@ export function ScannerScreen() {
       </Modal>
 
       {/* EVENT SELECTOR MODAL */}
-
+      <Modal
+        animationType="slide"
+        transparent
+        visible={selectorOpen}
+        onRequestClose={() => setSelectorOpen(false)}>
+        <Pressable
+          style={styles.selectorBackdrop}
+          accessibilityRole="button"
+          accessibilityLabel="Close event selector"
+          onPress={() => setSelectorOpen(false)}>
+          <View style={styles.selectorSheet}>
+            <View style={styles.selectorHandle} />
+            <Text style={styles.selectorSheetTitle}>Select Event</Text>
+            <Text style={styles.selectorSheetSubtitle}>Choose active event destination</Text>
+            <ScrollView style={styles.selectorList} showsVerticalScrollIndicator={false}>
+              {events.map((e) => {
+                const isSelected = e.id === selectedEventId;
+                return (
+                  <Pressable
+                    key={e.id}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setSelectedEventId(e.id);
+                      void setPreference(SELECTED_EVENT_KEY, e.id);
+                      setSelectorOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.selectorItemRow,
+                      isSelected && styles.selectorItemRowSelected,
+                      pressed && styles.pressed,
+                    ]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.selectorItemTitle, isSelected && styles.selectorItemTitleSelected]}>
+                        {e.name}
+                      </Text>
+                      {Boolean(e.venue) && (
+                        <Text style={styles.selectorItemSub}>{e.venue}</Text>
+                      )}
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={18} color="#0284C7" />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -705,6 +763,79 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: Palette.text,
+  },
+  headerEventSelectorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    maxWidth: 240,
+  },
+  selectorBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.54)',
+    justifyContent: 'flex-end',
+  },
+  selectorSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 36,
+    maxHeight: '70%',
+  },
+  selectorHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Palette.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  selectorSheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Palette.text,
+    marginBottom: 2,
+  },
+  selectorSheetSubtitle: {
+    fontSize: 13,
+    color: Palette.textSecondary,
+    marginBottom: 16,
+  },
+  selectorList: {
+    marginBottom: 8,
+  },
+  selectorItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: Palette.background,
+  },
+  selectorItemRowSelected: {
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#0284C7',
+  },
+  selectorItemTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Palette.text,
+  },
+  selectorItemTitleSelected: {
+    color: '#0284C7',
+    fontWeight: '700',
+  },
+  selectorItemSub: {
+    fontSize: 12,
+    color: Palette.textSecondary,
+    marginTop: 2,
   },
   pressed: {
     opacity: 0.7,

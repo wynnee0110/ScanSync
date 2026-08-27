@@ -16,6 +16,7 @@ import {
 import { DatePickerModal } from '@/components/date-picker-modal';
 import { TimePickerModal } from '@/components/time-picker-modal';
 import { Palette } from '@/constants/palette';
+import { SELECTED_EVENT_KEY, setPreference } from '@/lib/preferences';
 import {
   createEvent,
   deleteEvent,
@@ -513,6 +514,19 @@ export function EventsSection({ events, onEventCreated }: EventsSectionProps) {
                       <Text style={[styles.statusPillText, pillTextStyle]}>
                         {formatEventStatus(event.status)}
                       </Text>
+                    </Pressable>
+
+                    {/* Open Scanner Button */}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open scanner for ${event.name}`}
+                      onPress={(e) => {
+                        e?.stopPropagation();
+                        void setPreference(SELECTED_EVENT_KEY, event.id);
+                        router.push('/(tabs)/scan');
+                      }}
+                      style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}>
+                      <Ionicons name="qr-code-outline" size={17} color="#0284C7" />
                     </Pressable>
 
                     {/* Edit Event Button */}
