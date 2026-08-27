@@ -85,3 +85,4 @@ git push -u origin feature/short-description
 ```
 
 Do not commit `.env`, Google credentials, service-account JSON, access tokens, or participant data.
+# ScanSync
