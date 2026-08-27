@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: 330,
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 0,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 12 },
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: ITEM_HEIGHT * 2,
     height: ITEM_HEIGHT,
-    borderRadius: 10,
+    borderRadius: 0,
     backgroundColor: '#E0F2FE',
   },
 
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
   actionButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 0,
   },
 
   actionButtonText: {

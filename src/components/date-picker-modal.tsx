@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: 330,
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 0,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 12 },
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   navArrowBtn: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: 0,
     backgroundColor: Palette.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
   dayCircle: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -374,12 +374,12 @@ const styles = StyleSheet.create({
   dayCircleToday: {
     borderWidth: 1.5,
     borderColor: '#0284C7',
-    borderRadius: 18,
+    borderRadius: 0,
   },
 
   dayCircleSelected: {
     backgroundColor: '#0284C7',
-    borderRadius: 18,
+    borderRadius: 0,
   },
 
   dayText: {
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   actionButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 0,
   },
 
   actionButtonText: {
