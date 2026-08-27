@@ -12,11 +12,11 @@ import { initializeLocalDatabase } from '@/lib/local-database';
 SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
-  initialRouteName: '(tabs)',
+  initialRouteName: '(auth)',
 };
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { session, localUser, loading, isConfigured } = useAuth();
+  const { session, localUser, loading } = useAuth();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
 
@@ -26,14 +26,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     const inAuthGroup = segments[0] === '(auth)';
     const isAuthenticated = Boolean(session || localUser);
 
-    if (isConfigured) {
-      if (!isAuthenticated && !inAuthGroup) {
-        router.replace('/(auth)/login');
-      } else if (isAuthenticated && inAuthGroup) {
-        router.replace('/(tabs)');
-      }
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace('/(tabs)');
     }
-  }, [session, localUser, loading, segments, navigationState?.key, isConfigured]);
+  }, [session, localUser, loading, segments, navigationState?.key]);
 
   return <>{children}</>;
 }

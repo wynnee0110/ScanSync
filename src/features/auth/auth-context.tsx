@@ -5,6 +5,7 @@ import type { OperatorRole } from '@/features/operators/operator-types';
 import { isSupabaseConfigured, requireSupabase, supabase } from '@/lib/supabase';
 
 import { getOperators, subscribeOperators } from '@/features/operators/operator-store';
+import { getPreference, setPreference } from '@/lib/preferences';
 
 export interface LocalUser {
   id: string;
@@ -48,41 +49,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-
     let isMounted = true;
 
-    supabase.auth
-      .getSession()
-      .then(({ data: { session: initialSession } }) => {
-        if (isMounted) {
-          setSession(initialSession);
-          setLoading(false);
+    async function initAuth() {
+      try {
+        const rawLocalUser = await getPreference('auth.local_user');
+        if (isMounted && rawLocalUser) {
+          try {
+            setLocalUser(JSON.parse(rawLocalUser) as LocalUser);
+          } catch {}
         }
-      })
-      .catch((error: unknown) => {
-        console.warn('Failed to retrieve initial session:', error);
+      } catch {}
+
+      if (supabase) {
+        try {
+          const { data: { session: initialSession } } = await supabase.auth.getSession();
+          if (isMounted) setSession(initialSession);
+        } catch (error: unknown) {
+          console.warn('Failed to retrieve initial session:', error);
+        }
+      }
+
+      if (isMounted) setLoading(false);
+    }
+
+    void initAuth();
+
+    if (supabase) {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, currentSession) => {
         if (isMounted) {
+          setSession(currentSession);
           setLoading(false);
         }
       });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      if (isMounted) {
-        setSession(currentSession);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
+      return () => {
+        isMounted = false;
+        subscription.unsubscribe();
+      };
+    }
   }, []);
 
   useEffect(() => {
@@ -180,12 +187,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInLocally = (u: LocalUser) => {
     setLocalUser(u);
+    void setPreference('auth.local_user', JSON.stringify(u)).catch(() => {});
   };
 
   const signOut = async () => {
     setLocalUser(null);
     setDbRole(null);
     setDbEventId(null);
+    void setPreference('auth.local_user', '').catch(() => {});
     try {
       if (supabase) {
         const client = requireSupabase();
