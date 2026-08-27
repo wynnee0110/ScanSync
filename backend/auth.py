@@ -70,7 +70,7 @@ def verify_supabase_token(token: str, jwt_secret: str) -> dict:
             detail="Token has expired. Please sign in again.",
         )
     except JWTError as exc:
-        logger.warning("JWT verification failed: %s", type(exc).__name__)
+        logger.debug("JWT verification notice: %s", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token.",
