@@ -242,9 +242,11 @@ def get_drive_service(config):
             sa_info, scopes=SCOPES
         )
     else:  # oauth_user
+        ref_token = config.google_oauth_refresh_token or ""
+        logger.info("[Drive Auth] Initializing Google Credentials (token prefix: %s...)", ref_token[:12])
         creds = Credentials(
             token=None,
-            refresh_token=config.google_oauth_refresh_token,
+            refresh_token=ref_token,
             token_uri="https://oauth2.googleapis.com/token",
             client_id=config.google_oauth_client_id,
             client_secret=config.google_oauth_client_secret,
