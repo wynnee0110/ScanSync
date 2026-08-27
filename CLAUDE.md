@@ -1,0 +1,2 @@
+@AGENTS.md
+@docs/PROGRESS_REPORT.md
