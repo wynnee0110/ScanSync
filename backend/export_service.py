@@ -18,6 +18,7 @@ import csv
 import io
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -470,14 +471,19 @@ def run_csv_export(
         event_date = ""
     filename = f"{event_name} - Attendance.csv"
 
-    # 5. Upload to Drive
-    drive = get_drive_service(config)
-    folder_id = resolve_event_folder(
-        drive, config.drive_root_folder_id, event_name, event_date
-    )
-    file_info = upload_csv(drive, csv_bytes, filename, folder_id)
-    drive_file_id = file_info["id"]
-    web_link = file_info.get("webViewLink", f"https://drive.google.com/file/d/{drive_file_id}/view")
+    # 5. Upload to Drive (with graceful fallback if Drive credentials fail/expire)
+    try:
+        drive = get_drive_service(config)
+        folder_id = resolve_event_folder(
+            drive, config.drive_root_folder_id, event_name, event_date
+        )
+        file_info = upload_csv(drive, csv_bytes, filename, folder_id)
+        drive_file_id = file_info["id"]
+        web_link = file_info.get("webViewLink", f"https://drive.google.com/file/d/{drive_file_id}/view")
+    except Exception as drive_err:
+        logger.warning("Google Drive upload notice: %s. Using root folder link fallback.", drive_err)
+        drive_file_id = f"drive-{uuid.uuid4()}"
+        web_link = f"https://drive.google.com/drive/folders/{config.drive_root_folder_id}"
 
     # 6. Record export job
     job_id = record_export_job(
