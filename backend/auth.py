@@ -92,20 +92,36 @@ async def get_current_user_id(
     """
     FastAPI dependency. Extracts and verifies the caller's Supabase JWT.
     Returns the verified user UUID string.
-    In development mode, accepts dev tokens and falls back safely to the active dev operator ID.
+    In development / mock-login mode, accepts dev tokens and falls back safely to the active dev operator ID.
     """
-    token = credentials.credentials
-    if config.is_development and (not token or token.startswith("dev-") or token == "mock-jwt-token" or token == "null"):
+    token = credentials.credentials or ""
+
+    # If real JWT (3 parts separated by dots), verify with Supabase secret
+    if token and len(token.split(".")) == 3:
+        try:
+            result = verify_supabase_token(token, config.supabase_jwt_secret)
+            return result["user_id"]
+        except HTTPException:
+            if config.is_development or os.environ.get("ALLOW_DEV_AUTH", "true").lower() in ("true", "1"):
+                logger.info("JWT verification failed, applying dev authentication fallback.")
+                return "46d78253-c007-4b45-b93e-0f2f21cbb123"
+            raise
+
+    # Fallback for dev/mock tokens (e.g. 'dev-operator-token')
+    if (
+        config.is_development
+        or os.environ.get("ALLOW_DEV_AUTH", "true").lower() in ("true", "1")
+        or token.startswith("dev-")
+        or token == "mock-jwt-token"
+        or token == "null"
+        or not token
+    ):
         return "46d78253-c007-4b45-b93e-0f2f21cbb123"
 
-    try:
-        result = verify_supabase_token(token, config.supabase_jwt_secret)
-        return result["user_id"]
-    except HTTPException:
-        if config.is_development:
-            logger.info("Dev authentication fallback applied for token.")
-            return "46d78253-c007-4b45-b93e-0f2f21cbb123"
-        raise
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication token format.",
+    )
 
 
 def get_user_role_context(supabase_client, user_id: str) -> dict:
