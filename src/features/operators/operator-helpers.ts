@@ -59,7 +59,7 @@ export function getOperatorAccessStatus(
     if (!isNaN(startTime) && now < startTime) {
       return {
         label: 'SCHEDULED (Not Started)',
-        isRevoked: true,
+        isRevoked: false,
         color: '#D97706',
         bgColor: '#FEF3C7',
       };

@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Palette } from '@/constants/palette';
 import { useAuth } from '@/features/auth/auth-context';
-import { getOperators, syncOperatorsFromSupabase } from '@/features/operators/operator-store';
+import { loadStoredOperators, syncOperatorsFromSupabase } from '@/features/operators/operator-store';
 
 // Mock credentials fallback for unconfigured offline local testing
 const MOCK_USERNAME = 'admin';
@@ -95,7 +95,7 @@ export function LoginScreen() {
     }
 
     // Check operator store (for local operators created in Operators Dashboard)
-    const localOperators = getOperators();
+    const localOperators = await loadStoredOperators();
     const matchingOp = localOperators.find(
       (op) => matchesEmail(trimmedEmail, op.email) && matchesPasscode(trimmedPass, op.generatedPasswordCode),
     );
