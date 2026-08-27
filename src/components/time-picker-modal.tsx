@@ -274,16 +274,18 @@ const styles = StyleSheet.create({
   },
 
   materialHeader: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
     paddingTop: 18,
-    paddingBottom: 18,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Palette.borderLight,
   },
 
   materialHeaderLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#94A3B8',
+    color: Palette.textSecondary,
     letterSpacing: 1.2,
     marginBottom: 4,
   },
@@ -291,7 +293,7 @@ const styles = StyleSheet.create({
   materialHeaderValue: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: Palette.text,
     letterSpacing: -0.2,
   },
 
