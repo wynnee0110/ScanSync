@@ -131,6 +131,7 @@ CSV_FIELDNAMES = [
     "record_id",
     "participant_name",
     "student_id",
+    "program_course",
     "email",
     "year_level",
     "method",

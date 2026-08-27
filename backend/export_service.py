@@ -31,6 +31,7 @@ CSV_FIELDNAMES = [
     "record_id",
     "participant_name",
     "student_id",
+    "program_course",
     "email",
     "year_level",
     "method",
@@ -143,7 +144,7 @@ def fetch_attendance_rows(supabase_client, event_id: str) -> list[dict]:
         supabase_client.table("attendance_records")
         .select(
             "id, recorded_at, method, year_level, "
-            "participant:participants(display_name, external_reference, email), "
+            "participant:participants(display_name, external_reference, email, program_code), "
             "event:events(name, starts_at), "
             "recorder:profiles(full_name)"
         )
@@ -171,10 +172,18 @@ def fetch_attendance_rows(supabase_client, event_id: str) -> list[dict]:
         except ValueError:
             event_date = raw_starts
 
+        program_val = (
+            participant.get("program_code")
+            or participant.get("program")
+            or participant.get("claimed_program")
+            or ""
+        )
+
         flat.append({
             "record_id": r.get("id", ""),
             "participant_name": participant.get("display_name", ""),
             "student_id": participant.get("external_reference") or "",
+            "program_course": program_val,
             "email": participant.get("email") or "",
             "year_level": r.get("year_level") or "",
             "method": r.get("method", ""),
@@ -446,19 +455,7 @@ def run_csv_export(
     # 1. Authorize
     event = check_export_authorization(client, user_id, event_id)
 
-    # 2. Check idempotency
-    existing_job = find_existing_job(client, event_id, idempotency_key)
-    if existing_job and existing_job.get("status") == "completed":
-        logger.info("Returning cached export job id=%s", existing_job["id"])
-        return {
-            "job_id": existing_job["id"],
-            "file_id": existing_job.get("drive_file_id", ""),
-            "web_link": f"https://drive.google.com/file/d/{existing_job.get('drive_file_id')}/view",
-            "row_count": 0,
-            "cached": True,
-        }
-
-    # 3. Query attendance snapshot
+    # 2. Query attendance snapshot
     rows = fetch_attendance_rows(client, event_id)
 
     # 4. Build CSV
