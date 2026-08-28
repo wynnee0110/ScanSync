@@ -94,14 +94,10 @@ export function LoginScreen() {
     if (isConfigured) {
       const { error: authError } = await signInWithEmail(trimmedEmail, trimmedPass);
       if (!authError) {
-        // Supabase Auth succeeded — AuthGuard will navigate to /(tabs) via onAuthStateChange
         setLoading(false);
+        router.replace('/(tabs)' as Href);
         return;
       }
-      // Auth failed — show the exact Supabase error message
-      setLoading(false);
-      setError(authError.message || 'Invalid email or password.');
-      return;
     }
 
     // Supabase not configured: check local operator store

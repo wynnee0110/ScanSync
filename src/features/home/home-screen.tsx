@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type Href, router, useFocusEffect } from 'expo-router';
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,6 +12,9 @@ import {
   listEvents,
 } from '@/features/events/event-repository';
 import type { DashboardStats, LocalEvent } from '@/features/events/event-types';
+
+import { getOperators, subscribeOperators } from '@/features/operators/operator-store';
+import type { OperatorItem } from '@/features/operators/operator-types';
 import { HomeHeader } from '@/features/home/home-header';
 import { QuickStats } from '@/features/home/quick-stats';
 import { ScannerStatusCard } from '@/features/home/scanner-status-card';
@@ -32,6 +35,14 @@ export function HomeScreen() {
   const [events, setEvents] = useState<LocalEvent[]>([]);
   const [storedSelectedEventId, setStoredSelectedEventId] = useState<string | null>(null);
   const [selectedTodayCount, setSelectedTodayCount] = useState(0);
+  const [operators, setOperatorsState] = useState<OperatorItem[]>(() => getOperators());
+
+  useEffect(() => {
+    const unsub = subscribeOperators(() => {
+      setOperatorsState(getOperators());
+    });
+    return unsub;
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -84,6 +95,39 @@ export function HomeScreen() {
     return events;
   }, [events, userRole, userEmail, assignedEventId]);
 
+  const scopedEventIds = useMemo(() => new Set(scopedEvents.map((e) => e.id)), [scopedEvents]);
+
+  const scopedStats = useMemo(() => {
+    if (userRole === 'Superadmin') {
+      return stats;
+    }
+    const totalAttendees = scopedEvents.reduce((sum, e) => sum + e.attendeeCount, 0);
+    return {
+      ...stats,
+      totalAttendees,
+      totalEvents: scopedEvents.length,
+      activeEvents: scopedEvents.filter((e) => e.status === 'active').length,
+    };
+  }, [userRole, scopedEvents, stats]);
+
+  const operatorBadgeText = useMemo(() => {
+    if (userRole === 'Superadmin') {
+      const count = operators.length;
+      return `${count} ${count === 1 ? 'operator' : 'operators'}`;
+    }
+    if (userRole === 'Organizer') {
+      const managedVolunteers = operators.filter(
+        (op) =>
+          op.role === 'Volunteer' &&
+          ((op.createdBy && op.createdBy.toLowerCase() === userEmail) ||
+            (op.assignedEventId && scopedEventIds.has(op.assignedEventId))),
+      );
+      const count = managedVolunteers.length;
+      return `${count} ${count === 1 ? 'volunteer' : 'volunteers'}`;
+    }
+    return 'Active';
+  }, [userRole, operators, userEmail, scopedEventIds]);
+
   const selectedEvent =
     scopedEvents.find((event) => event.id === storedSelectedEventId) ??
     scopedEvents.find((event) => event.status === 'active') ??
@@ -133,9 +177,9 @@ export function HomeScreen() {
         </View>
 
         <QuickStats
-          scans={stats.totalAttendees}
-          today={stats.todayAttendees}
-          pending={stats.pendingSync}
+          scans={scopedStats.totalAttendees}
+          today={selectedTodayCount > 0 ? selectedTodayCount : scopedStats.todayAttendees}
+          pending={scopedStats.pendingSync}
         />
 
         {/* NAVIGATION BUTTONS */}
@@ -185,7 +229,7 @@ export function HomeScreen() {
                 <Text style={styles.navTitle}>Attendance History</Text>
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
-                    {stats.totalAttendees} {stats.totalAttendees === 1 ? 'record' : 'records'}
+                    {scopedStats.totalAttendees} {scopedStats.totalAttendees === 1 ? 'record' : 'records'}
                   </Text>
                 </View>
               </View>
@@ -209,7 +253,7 @@ export function HomeScreen() {
                 <View style={styles.navTitleRow}>
                   <Text style={styles.navTitle}>Operators Dashboard</Text>
                   <View style={styles.badge}>
-                    <Text style={styles.badgeText}>Active</Text>
+                    <Text style={styles.badgeText}>{operatorBadgeText}</Text>
                   </View>
                 </View>
                 <Text style={styles.navSubtitle}>View active scanners, staff roles, and operator status</Text>
