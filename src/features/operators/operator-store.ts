@@ -9,7 +9,7 @@
 
 import Constants from 'expo-constants';
 
-import type { OperatorItem } from '@/features/operators/operator-types';
+import type { OperatorItem, OperatorRole } from '@/features/operators/operator-types';
 import { getPreference, setPreference } from '@/lib/preferences';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
@@ -108,6 +108,7 @@ export function removeOperator(id: string): void {
   _notify();
   void persistStoredOperators();
   void removePendingOperator(id);
+  void deleteOperatorFromSupabase(id);
 }
 
 async function getPendingOperatorIds(): Promise<Set<string>> {
@@ -141,16 +142,18 @@ export async function syncOperatorsFromSupabase(): Promise<void> {
   await loadStoredOperators();
   const pendingIds = await getPendingOperatorIds();
   const backendUrl = getBackendUrl();
-  // 1. Try server backend API endpoint first
+  // 1. Try server backend API endpoint first with a 1.5s timeout
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
     const res = await fetch(`${backendUrl}/api/operators`, {
       headers: await getBackendAuthorizationHeaders(),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+
     if (res.ok) {
       const data = (await res.json()) as OperatorItem[];
-      if (Array.isArray(data)) {
-        // The backend returns only Supabase Auth-backed users. Do not retain
-        // stale device records once the authoritative request has succeeded.
+      if (Array.isArray(data) && data.length > 0) {
         const pendingLocal = _operators.filter((operator) => pendingIds.has(operator.id));
         const remoteIds = new Set(data.map((operator) => operator.id));
         _operators = [...data, ...pendingLocal.filter((operator) => !remoteIds.has(operator.id))];
@@ -163,8 +166,66 @@ export async function syncOperatorsFromSupabase(): Promise<void> {
     // Fallback to client-side Supabase SDK below
   }
 
-  // A public client cannot verify Auth users. Keeping a profile-only fallback
-  // would reintroduce orphaned records into the dashboard.
+  // 2. Fallback to client-side Supabase SDK if server endpoint is unreachable
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const [profilesRes, membershipsRes, volunteersRes] = await Promise.all([
+        supabase.from('profiles').select('*'),
+        supabase.from('memberships').select('*'),
+        supabase.from('event_volunteers').select('*, events(name)'),
+      ]);
+
+      const profiles = profilesRes.data ?? [];
+      const memberships = membershipsRes.data ?? [];
+      const volunteers = volunteersRes.data ?? [];
+
+      if (profiles.length > 0) {
+        const membershipMap = new Map(memberships.map((m: { user_id: string; role: string }) => [m.user_id, m.role]));
+        const volunteerMap = new Map(
+          volunteers.map((v: { user_id: string; event_id: string; events?: { name: string } | { name: string }[] }) => [
+            v.user_id,
+            v,
+          ]),
+        );
+
+        const fetchedOperators: OperatorItem[] = profiles.map(
+          (p: { id: string; full_name?: string | null; email?: string | null; access_code?: string | null; created_at?: string }) => {
+            const rawRole = membershipMap.get(p.id);
+            let role: OperatorRole = 'Volunteer';
+            if (rawRole === 'superadmin') role = 'Superadmin';
+            else if (rawRole === 'organizer') role = 'Organizer';
+
+            const volInfo = volunteerMap.get(p.id);
+            const assignedEventId = volInfo?.event_id ?? null;
+            const eventName = Array.isArray(volInfo?.events)
+              ? volInfo?.events[0]?.name
+              : volInfo?.events?.name;
+            const assignedEventName = eventName || (assignedEventId ? 'Assigned Event' : 'All Events');
+
+            return {
+              id: p.id,
+              name: p.full_name || p.email?.split('@')[0] || 'Operator',
+              email: p.email || '',
+              role,
+              assignedEventId,
+              assignedEventName,
+              generatedPasswordCode: p.access_code || '123456',
+              scansCount: 0,
+              createdAt: p.created_at || new Date().toISOString(),
+            };
+          },
+        );
+
+        const pendingLocal = _operators.filter((operator) => pendingIds.has(operator.id));
+        const remoteIds = new Set(fetchedOperators.map((operator) => operator.id));
+        _operators = [...fetchedOperators, ...pendingLocal.filter((operator) => !remoteIds.has(operator.id))];
+        _notify();
+        void persistStoredOperators();
+      }
+    } catch (err) {
+      console.warn('[OperatorStore] Client Supabase fallback notice:', err);
+    }
+  }
 }
 
 /** Publishes only accounts explicitly created or edited on this device. */
@@ -286,15 +347,18 @@ export async function saveOperatorToSupabase(op: OperatorItem): Promise<boolean>
 
 /** Deletes operator profile and role assignments from Supabase Cloud. */
 export async function deleteOperatorFromSupabase(id: string): Promise<void> {
+  const targetOp = _operators.find((op) => op.id === id);
   const backendUrl = getBackendUrl();
-  // 1. Try server backend API endpoint first
+  // 1. Try server backend API endpoint first with a 1.5s timeout
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
     const res = await fetch(`${backendUrl}/api/operators/${id}`, {
       method: 'DELETE',
       headers: await getBackendAuthorizationHeaders(),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
     if (res.ok) {
-      await syncOperatorsFromSupabase();
       return;
     }
   } catch {
@@ -304,14 +368,12 @@ export async function deleteOperatorFromSupabase(id: string): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
 
   try {
-    const targetOp = _operators.find((op) => op.id === id);
     await supabase.from('event_volunteers').delete().eq('user_id', id);
     await supabase.from('memberships').delete().eq('user_id', id);
     await supabase.from('profiles').delete().eq('id', id);
     if (targetOp?.email) {
       await supabase.from('profiles').delete().eq('email', targetOp.email);
     }
-    await syncOperatorsFromSupabase();
   } catch (err) {
     console.warn('Notice deleting operator from Supabase:', err);
   }

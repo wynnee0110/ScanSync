@@ -59,6 +59,14 @@ export function OperatorCard({
         </View>
 
         <View style={styles.detailRow}>
+          <Ionicons name="mail-outline" size={14} color={Palette.textSecondary} />
+          <Text style={styles.detailLabel}>Access Email:</Text>
+          <Text style={[styles.detailValue, { fontWeight: '600' }]} numberOfLines={1}>
+            {operator.email || 'No Email Registered'}
+          </Text>
+        </View>
+
+        <View style={styles.detailRow}>
           <Ionicons name="key-outline" size={14} color={Palette.accent} />
           <Text style={styles.detailLabel}>Access Password / Code:</Text>
           <Text style={[styles.detailValue, { color: Palette.accent, fontWeight: '700' }]}>

@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DatePickerModal } from '@/components/date-picker-modal';
 import { TimePickerModal } from '@/components/time-picker-modal';
+import { HotToast, type ToastMessage } from '@/components/hot-toast';
 import { Palette } from '@/constants/palette';
 import { SELECTED_EVENT_KEY, setPreference } from '@/lib/preferences';
 import { HistorySection } from '@/features/attendance/history-section';
@@ -105,6 +106,7 @@ export function EventDetailScreen({ eventId }: EventDetailScreenProps) {
   // Sync state
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const { user, localUser, role: userRole, assignedEventId } = useAuth();
   const userEmail = (localUser?.email || user?.email || '').toLowerCase();
@@ -396,6 +398,7 @@ export function EventDetailScreen({ eventId }: EventDetailScreenProps) {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+      <HotToast toast={toast} onDismiss={() => setToast(null)} />
       {/* HEADER BAR */}
       <View style={styles.headerBar}>
         <Pressable
@@ -419,14 +422,32 @@ export function EventDetailScreen({ eventId }: EventDetailScreenProps) {
               setSyncing(true);
               try {
                 const res = await processSyncQueue(event.id);
-                Alert.alert(
-                  'Sync Complete',
-                  `Synced event attendance and updated Google Drive CSV file.\n(${res.successCount} local mutations processed).`,
-                  [{ text: 'OK' }],
-                );
+                setToast({
+                  type: 'success',
+                  title: 'Sync Complete',
+                  message: `Synced event attendance with Google Drive & cloud (${res.successCount} local records processed).`,
+                });
               } catch (err: unknown) {
                 const message = err instanceof Error ? err.message : 'Sync encountered an issue.';
-                Alert.alert('Sync Notice', message);
+                if (message.includes('offline') || message.includes('Cannot sync offline')) {
+                  setToast({
+                    type: 'offline',
+                    title: 'Cannot Sync Offline',
+                    message: 'Connect to Wi-Fi or mobile data to sync attendance data.',
+                  });
+                } else if (message.includes('revoked')) {
+                  setToast({
+                    type: 'error',
+                    title: 'Access Revoked',
+                    message: 'Operator access has been revoked.',
+                  });
+                } else {
+                  setToast({
+                    type: 'error',
+                    title: 'Sync Notice',
+                    message,
+                  });
+                }
               } finally {
                 setSyncing(false);
                 void reload();

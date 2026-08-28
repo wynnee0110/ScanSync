@@ -6,19 +6,35 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xhzprnpnilcosunfaqaj.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_YQET9WVT0Zw10D5QSIhsGw_36uhhDiG",
+        "EXPO_PUBLIC_API_URL": "https://scansync-lius.onrender.com"
+      }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xhzprnpnilcosunfaqaj.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_YQET9WVT0Zw10D5QSIhsGw_36uhhDiG",
+        "EXPO_PUBLIC_API_URL": "https://scansync-lius.onrender.com"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xhzprnpnilcosunfaqaj.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_YQET9WVT0Zw10D5QSIhsGw_36uhhDiG",
+        "EXPO_PUBLIC_API_URL": "https://scansync-lius.onrender.com"
+      }
     }
   },
   "submit": {
     "production": {}
   }
 }
+

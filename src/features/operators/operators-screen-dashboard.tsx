@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { HotToast, type ToastMessage } from '@/components/hot-toast';
 import { Palette } from '@/constants/palette';
 import { useAuth } from '@/features/auth/auth-context';
 import { listEvents } from '@/features/events/event-repository';
@@ -36,6 +37,7 @@ export default function OperatorsScreenDashboard() {
   const [activeTab, setActiveTab] = useState<OperatorTab>('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const isVolunteerViewer = userRole === 'Volunteer';
   const isOrganizerViewer = userRole === 'Organizer';
@@ -195,14 +197,33 @@ export default function OperatorsScreenDashboard() {
     setPublishing(true);
     try {
       const published = await publishPendingOperators();
-      Alert.alert('Sync Complete', published > 0 ? `${published} local account(s) are now available to authorized users.` : 'There are no local account changes to publish.');
-    } catch {
-      Alert.alert('Sync Failed', 'Your local accounts remain on this device. Check the connection and try again.');
+      setToast({
+        type: 'success',
+        title: 'Sync Complete',
+        message:
+          published > 0
+            ? `${published} local account(s) are now available to authorized users.`
+            : 'There are no local account changes to publish.',
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('offline') || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+        setToast({
+          type: 'offline',
+          title: 'Cannot Sync Offline',
+          message: 'Connect to Wi-Fi or mobile data to publish operator changes.',
+        });
+      } else {
+        setToast({
+          type: 'error',
+          title: 'Sync Failed',
+          message: 'Your local accounts remain on this device. Check the connection and try again.',
+        });
+      }
     } finally {
       setPublishing(false);
     }
   };
-
 
   const handleDeleteOperator = (id: string, name: string) => {
     const targetOp = operators.find((op) => op.id === id);
@@ -268,6 +289,7 @@ export default function OperatorsScreenDashboard() {
   // -------------------------------------------------------------------------
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+      <HotToast toast={toast} onDismiss={() => setToast(null)} />
       {/* Header Bar */}
       <View style={styles.headerBar}>
         <Pressable

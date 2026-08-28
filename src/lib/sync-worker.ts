@@ -1,6 +1,14 @@
 
+import {
+  upsertRemoteEventsLocal,
+  upsertRemoteAttendanceLocal,
+  type RemoteEventInput,
+  type RemoteAttendanceInput,
+} from '@/features/events/event-repository';
+import { syncOperatorsFromSupabase } from '@/features/operators/operator-store';
 import { requestCsvExport } from '@/lib/export-api';
-import { supabase } from '@/lib/supabase';
+import { getPreference } from '@/lib/preferences';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
   listReadySyncOperations,
   markSyncOperationFailed,
@@ -298,7 +306,171 @@ async function processAttendanceOperation(
   }
 }
 
+/** Pulls remote events from Supabase and hydrates local storage. */
+export async function pullRemoteEvents(): Promise<number> {
+  if (!isSupabaseConfigured || !supabase) return 0;
+  const { data, error } = await supabase.from('events').select('*');
+  if (error || !data) {
+    console.warn('[SyncWorker] Pull remote events notice:', error);
+    return 0;
+  }
+  const formattedEvents: RemoteEventInput[] = data.map(
+    (row: {
+      id: string;
+      name: string;
+      venue: string;
+      starts_at: string;
+      ends_at?: string | null;
+      academic_reference_year?: number;
+      status?: string;
+      expected_attendees?: number;
+      created_by?: string | null;
+      created_at?: string | null;
+      updated_at?: string | null;
+    }) => ({
+      id: row.id,
+      name: row.name,
+      venue: row.venue,
+      starts_at: row.starts_at,
+      ends_at: row.ends_at ?? null,
+      academic_reference_year: row.academic_reference_year ?? new Date().getFullYear(),
+      status: (row.status as any) ?? 'active',
+      expected_attendees: row.expected_attendees ?? 0,
+      created_by: row.created_by ?? null,
+      created_at: row.created_at ?? null,
+      updated_at: row.updated_at ?? null,
+    }),
+  );
+  await upsertRemoteEventsLocal(formattedEvents);
+  return formattedEvents.length;
+}
+
+/** Pulls remote attendance records (joined with participant info) from Supabase and hydrates local storage. */
+export async function pullRemoteAttendance(): Promise<number> {
+  if (!isSupabaseConfigured || !supabase) return 0;
+  const { data, error } = await supabase.from('attendance_records').select(`
+      client_record_id,
+      event_id,
+      method,
+      recorded_at,
+      year_level,
+      participants (
+        external_reference,
+        display_name,
+        program_code
+      )
+    `);
+
+  if (error || !data) {
+    console.warn('[SyncWorker] Pull remote attendance notice:', error);
+    return 0;
+  }
+
+  const formattedAttendance: RemoteAttendanceInput[] = data
+    .filter(
+      (row: { client_record_id?: string | null; event_id?: string | null }) =>
+        Boolean(row.client_record_id) && Boolean(row.event_id),
+    )
+    .map(
+      (row: {
+        client_record_id: string;
+        event_id: string;
+        method?: string;
+        recorded_at?: string;
+        year_level?: number | null;
+        participants?:
+          | {
+              external_reference?: string;
+              display_name?: string | null;
+              program_code?: string | null;
+            }
+          | {
+              external_reference?: string;
+              display_name?: string | null;
+              program_code?: string | null;
+            }[];
+      }) => {
+        const part = Array.isArray(row.participants) ? row.participants[0] : row.participants;
+        return {
+          client_record_id: row.client_record_id,
+          event_id: row.event_id,
+          participant_reference: part?.external_reference || 'UNKNOWN',
+          participant_name: part?.display_name || null,
+          participant_program: part?.program_code || null,
+          qr_format: 'opaque',
+          year_level: row.year_level ?? null,
+          method: row.method === 'manual' ? 'manual' : 'qr',
+          recorded_at: row.recorded_at || new Date().toISOString(),
+        };
+      },
+    );
+
+  await upsertRemoteAttendanceLocal(formattedAttendance);
+  return formattedAttendance.length;
+}
+
 export async function processSyncQueue(targetEventId?: string): Promise<SyncProcessResult> {
+  // Network connectivity guard: stop sync immediately if offline
+  try {
+    let isOnline = true;
+    if (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean') {
+      isOnline = navigator.onLine;
+    }
+
+    if (isOnline) {
+      try {
+        const { Platform } = await import('react-native');
+        if (Platform.OS !== 'web') {
+          const Network = await import('expo-network');
+          const state = await Network.getNetworkStateAsync();
+          isOnline = Boolean(state.isConnected && state.isInternetReachable !== false);
+        }
+      } catch {
+        // Fallback to navigator status if network module lookup fails
+      }
+    }
+
+    if (!isOnline) {
+      throw new Error('Cannot sync offline');
+    }
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === 'Cannot sync offline') {
+      throw err;
+    }
+  }
+
+  // Pre-sync guard: verify active operator access status before attempting queue processing
+  try {
+    const rawLocalUser = await getPreference('auth.local_user');
+    if (rawLocalUser) {
+      const parsedUser = JSON.parse(rawLocalUser) as { id?: string; email?: string };
+      if (parsedUser?.id || parsedUser?.email) {
+        const { loadStoredOperators } = await import('@/features/operators/operator-store');
+        const { listEvents } = await import('@/features/events/event-repository');
+        const { getOperatorAccessStatus } = await import('@/features/operators/operator-helpers');
+
+        const ops = await loadStoredOperators();
+        const events = await listEvents().catch(() => []);
+        const matchingOp = ops.find(
+          (op) =>
+            (parsedUser.id && op.id === parsedUser.id) ||
+            (parsedUser.email && op.email.toLowerCase() === parsedUser.email.toLowerCase()),
+        );
+
+        if (matchingOp) {
+          const status = getOperatorAccessStatus(matchingOp, events);
+          if (status.isRevoked) {
+            throw new Error(`Sync Aborted: Operator access revoked (${status.label})`);
+          }
+        }
+      }
+    }
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.startsWith('Sync Aborted:')) {
+      throw err;
+    }
+  }
+
   const context = (await resolveSyncActorContext()) ?? {
     orgId: 'd0a1b2c3-4d5e-6f7a-8b9c-0d1e2f3a4b5c',
     userId: '46d78253-c007-4b45-b93e-0f2f21cbb123',
@@ -358,35 +530,54 @@ export async function processSyncQueue(targetEventId?: string): Promise<SyncProc
     }
   }
 
+  // Phase 2: Downstream hydration — pull existing events and attendance records from Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await pullRemoteEvents();
+      await pullRemoteAttendance();
+    } catch (pullErr) {
+      console.warn('[SyncWorker] Downstream pull hydration notice:', pullErr);
+    }
+
+    // Phase 3: Operator sync — fetch cloud accounts & permissions
+    try {
+      await syncOperatorsFromSupabase();
+    } catch (opErr) {
+      console.warn('[SyncWorker] Operator sync notice:', opErr);
+    }
+  }
+
   const syncedEventIds = Array.from(syncedEventIdsSet);
 
-  // Auto-generate / update CSV export on Google Drive for synced events
+  // Auto-generate / update CSV export on Google Drive for synced events (asynchronous background task)
   if (syncedEventIds.length > 0) {
-    try {
-      const sessionRes = supabase ? await supabase.auth.getSession() : null;
-      const accessToken = sessionRes?.data?.session?.access_token || 'dev-operator-token';
+    void (async () => {
+      try {
+        const sessionRes = supabase ? await supabase.auth.getSession() : null;
+        const accessToken = sessionRes?.data?.session?.access_token || 'dev-operator-token';
 
-      for (const eventId of syncedEventIds) {
-        try {
-          console.log(`[SyncWorker] Auto-triggering CSV export for event ${eventId}...`);
-          const exportResult = await requestCsvExport({ eventId, accessToken });
-          if (exportResult.ok) {
-            console.log(
-              `[SyncWorker] Auto CSV export complete for event ${eventId}. Drive File ID: ${exportResult.fileId}, Link: ${exportResult.webLink}`,
-            );
-          } else {
-            console.warn(
-              `[SyncWorker] Auto CSV export response error for event ${eventId}:`,
-              exportResult.message,
-            );
+        for (const eventId of syncedEventIds) {
+          try {
+            console.log(`[SyncWorker] Auto-triggering CSV export for event ${eventId}...`);
+            const exportResult = await requestCsvExport({ eventId, accessToken });
+            if (exportResult.ok) {
+              console.log(
+                `[SyncWorker] Auto CSV export complete for event ${eventId}. Drive File ID: ${exportResult.fileId}, Link: ${exportResult.webLink}`,
+              );
+            } else {
+              console.warn(
+                `[SyncWorker] Auto CSV export response error for event ${eventId}:`,
+                exportResult.message,
+              );
+            }
+          } catch (exportErr) {
+            console.warn(`[SyncWorker] Auto CSV export exception for event ${eventId}:`, exportErr);
           }
-        } catch (exportErr) {
-          console.warn(`[SyncWorker] Auto CSV export exception for event ${eventId}:`, exportErr);
         }
+      } catch (sessionErr) {
+        console.warn('[SyncWorker] Auto CSV export session lookup notice:', sessionErr);
       }
-    } catch (sessionErr) {
-      console.warn('[SyncWorker] Auto CSV export session lookup notice:', sessionErr);
-    }
+    })();
   }
 
   return {
@@ -396,3 +587,4 @@ export async function processSyncQueue(targetEventId?: string): Promise<SyncProc
     syncedEventIds,
   };
 }
+

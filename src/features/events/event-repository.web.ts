@@ -11,7 +11,7 @@ import type {
   UpdateEventInput,
   YearLevel,
 } from '@/features/events/event-types';
-import { countYearLevels, createEmptyYearLevelCounts } from '@/features/attendance/year-level';
+import { countYearLevels, createEmptyYearLevelCounts, isYearLevel } from '@/features/attendance/year-level';
 import { createUuid } from '@/lib/uuid';
 
 const EVENTS_KEY = 'attendance-manager.events';
@@ -279,3 +279,90 @@ export async function getTodayAttendanceCountForEvent(eventId: string): Promise<
       new Date(a.recordedAt) < endOfToday,
   ).length;
 }
+
+export type RemoteEventInput = {
+  id: string;
+  name: string;
+  venue: string;
+  starts_at: string;
+  ends_at: string | null;
+  academic_reference_year: number;
+  status: EventStatus;
+  expected_attendees: number;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type RemoteAttendanceInput = {
+  client_record_id: string;
+  event_id: string;
+  participant_reference: string;
+  participant_name: string | null;
+  participant_program: string | null;
+  qr_format?: 'opaque' | 'school_id';
+  year_level: number | null;
+  method: 'qr' | 'manual';
+  recorded_at: string;
+};
+
+export async function upsertRemoteEventsLocal(remoteEvents: RemoteEventInput[]): Promise<void> {
+  if (remoteEvents.length === 0) return;
+  const events = readJson<LocalEvent[]>(EVENTS_KEY, []);
+  const now = new Date().toISOString();
+  const eventMap = new Map(events.map((e) => [e.id, e]));
+
+  for (const remote of remoteEvents) {
+    const existing = eventMap.get(remote.id);
+    const fallbackEndsAt = new Date(
+      new Date(remote.starts_at).getTime() + 4 * 60 * 60 * 1000,
+    ).toISOString();
+
+    const merged: LocalEvent = {
+      id: remote.id,
+      name: remote.name.trim(),
+      venue: remote.venue.trim(),
+      startsAt: remote.starts_at,
+      endsAt: remote.ends_at ?? fallbackEndsAt,
+      academicReferenceYear: remote.academic_reference_year,
+      status: remote.status,
+      expectedAttendees: remote.expected_attendees,
+      attendeeCount: existing?.attendeeCount ?? 0,
+      yearLevelCounts: existing?.yearLevelCounts ?? createEmptyYearLevelCounts(),
+      unknownYearCount: existing?.unknownYearCount ?? 0,
+      createdBy: remote.created_by ?? existing?.createdBy,
+      createdAt: remote.created_at ?? existing?.createdAt ?? now,
+      updatedAt: remote.updated_at ?? now,
+    };
+    eventMap.set(remote.id, merged);
+  }
+
+  writeJson(EVENTS_KEY, Array.from(eventMap.values()));
+}
+
+export async function upsertRemoteAttendanceLocal(
+  remoteAttendance: RemoteAttendanceInput[],
+): Promise<void> {
+  if (remoteAttendance.length === 0) return;
+  const attendance = readJson<WebAttendanceRecord[]>(ATTENDANCE_KEY, []);
+  const attMap = new Map(attendance.map((a) => [a.id, a]));
+
+  for (const remote of remoteAttendance) {
+    const yearLevel: YearLevel | null = isYearLevel(remote.year_level) ? remote.year_level : null;
+    attMap.set(remote.client_record_id, {
+      id: remote.client_record_id,
+      eventId: remote.event_id,
+      participantReference: remote.participant_reference,
+      participantName: remote.participant_name ?? null,
+      participantProgram: remote.participant_program ?? null,
+      qrFormat: remote.qr_format ?? 'opaque',
+      yearLevel,
+      method: remote.method,
+      recordedAt: remote.recorded_at,
+      syncStatus: 'synced',
+    });
+  }
+
+  writeJson(ATTENDANCE_KEY, Array.from(attMap.values()));
+}
+

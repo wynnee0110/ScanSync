@@ -4,8 +4,12 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { OperatorRole } from '@/features/operators/operator-types';
 import { isSupabaseConfigured, requireSupabase, supabase } from '@/lib/supabase';
 
-import { getOperators, subscribeOperators } from '@/features/operators/operator-store';
+import { listEvents } from '@/features/events/event-repository';
+import { getOperatorAccessStatus } from '@/features/operators/operator-helpers';
+import { getOperators, loadStoredOperators, subscribeOperators } from '@/features/operators/operator-store';
 import { getPreference, setPreference } from '@/lib/preferences';
+
+export const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface LocalUser {
   id: string;
@@ -13,6 +17,7 @@ export interface LocalUser {
   name?: string;
   role?: OperatorRole;
   assignedEventId?: string | null;
+  expiresAt?: number;
 }
 
 interface AuthContextType {
@@ -24,7 +29,7 @@ interface AuthContextType {
   loading: boolean;
   isConfigured: boolean;
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signInLocally: (user: LocalUser) => void;
+  signInLocally: (user: LocalUser, rememberMe?: boolean) => void;
   signOut: () => Promise<{ error: Error | null }>;
 }
 
@@ -56,7 +61,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const rawLocalUser = await getPreference('auth.local_user');
         if (isMounted && rawLocalUser) {
           try {
-            setLocalUser(JSON.parse(rawLocalUser) as LocalUser);
+            const parsed = JSON.parse(rawLocalUser) as LocalUser;
+            // Check 30-day session expiration
+            if (parsed.expiresAt && Date.now() > parsed.expiresAt) {
+              void setPreference('auth.local_user', '').catch(() => {});
+            } else {
+              // Verify operator access status is valid and not revoked
+              const allOps = await loadStoredOperators();
+              const realEvents = await listEvents().catch(() => []);
+              const matchingOp = allOps.find(
+                (op) =>
+                  (parsed.id && op.id === parsed.id) ||
+                  (parsed.email && op.email.toLowerCase() === parsed.email.toLowerCase()),
+              );
+
+              if (matchingOp) {
+                const accessStatus = getOperatorAccessStatus(matchingOp, realEvents);
+                if (accessStatus.isRevoked) {
+                  void setPreference('auth.local_user', '').catch(() => {});
+                } else if (isMounted) {
+                  setLocalUser(parsed);
+                }
+              }
+            }
           } catch {}
         }
       } catch {}
@@ -70,7 +97,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if (isMounted) setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+        void import('@/lib/sync-worker').then(({ processSyncQueue }) => processSyncQueue().catch(() => {}));
+      }
     }
 
     void initAuth();
@@ -101,27 +131,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           (localUser.id && op.id === localUser.id) ||
           (localUser.email && op.email.toLowerCase() === localUser.email.toLowerCase()),
       );
+
       if (matchingOp) {
-        setLocalUser((prev) => {
-          if (!prev) return null;
-          if (
-            prev.role !== matchingOp.role ||
-            prev.assignedEventId !== matchingOp.assignedEventId ||
-            prev.email !== matchingOp.email ||
-            prev.name !== matchingOp.name
-          ) {
-            return {
-              ...prev,
-              id: matchingOp.id,
-              name: matchingOp.name,
-              email: matchingOp.email,
-              role: matchingOp.role,
-              assignedEventId: matchingOp.assignedEventId,
-            };
-          }
-          return prev;
-        });
+        void (async () => {
+          try {
+            const realEvents = await listEvents().catch(() => []);
+            const accessStatus = getOperatorAccessStatus(matchingOp, realEvents);
+            if (accessStatus.isRevoked) {
+              void signOut();
+              return;
+            }
+          } catch {}
+
+          setLocalUser((prev) => {
+            if (!prev) return null;
+            if (
+              prev.role !== matchingOp.role ||
+              prev.assignedEventId !== matchingOp.assignedEventId ||
+              prev.email !== matchingOp.email ||
+              prev.name !== matchingOp.name
+            ) {
+              return {
+                ...prev,
+                id: matchingOp.id,
+                name: matchingOp.name,
+                email: matchingOp.email,
+                role: matchingOp.role,
+                assignedEventId: matchingOp.assignedEventId,
+              };
+            }
+            return prev;
+          });
+        })();
       }
+      // Note: do NOT sign out users who are authenticated via Supabase Auth (session).
+      // Only local operator accounts (no Supabase session) are evicted when removed from the operator store.
     });
     return unsub;
   }, [localUser?.id, localUser?.email]);
@@ -185,9 +229,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signInLocally = (u: LocalUser) => {
-    setLocalUser(u);
-    void setPreference('auth.local_user', JSON.stringify(u)).catch(() => {});
+  const signInLocally = (u: LocalUser, rememberMe = true) => {
+    if (rememberMe) {
+      const userWithExpiry: LocalUser = {
+        ...u,
+        expiresAt: Date.now() + THIRTY_DAYS_MS,
+      };
+      setLocalUser(userWithExpiry);
+      void setPreference('auth.local_user', JSON.stringify(userWithExpiry)).catch(() => {});
+      void setPreference('auth.remember_me', 'true').catch(() => {});
+      void setPreference('auth.remembered_email', u.email).catch(() => {});
+    } else {
+      setLocalUser(u);
+      void setPreference('auth.local_user', '').catch(() => {});
+      void setPreference('auth.remember_me', 'false').catch(() => {});
+      void setPreference('auth.remembered_email', '').catch(() => {});
+    }
   };
 
   const signOut = async () => {
@@ -245,3 +302,4 @@ export function useAuth() {
   }
   return context;
 }
+

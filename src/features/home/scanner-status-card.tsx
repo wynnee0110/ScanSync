@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import type { LocalEvent } from '@/features/events/event-types';
 import { formatEventTimeRange } from '@/features/events/formatters';
+import { useNetworkStatus } from '@/lib/use-network-status';
 
 type ScannerStatusCardProps = {
   event: LocalEvent | null;
@@ -19,6 +20,7 @@ export function ScannerStatusCard({
   onSelectEvent,
 }: ScannerStatusCardProps) {
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const networkStatus = useNetworkStatus();
 
   const handleSelect = useCallback(
     (eventId: string) => {
@@ -37,11 +39,20 @@ export function ScannerStatusCard({
     <View style={styles.card}>
       <View style={styles.topRow}>
         <View style={styles.onlineRow}>
-          <View style={styles.dot} />
-          <Text style={styles.onlineText}>Scanner Online</Text>
+          <View
+            style={[
+              styles.dot,
+              !networkStatus.isConnected && styles.offlineDot,
+            ]}
+          />
+          <Text
+            style={[
+              styles.onlineText,
+              !networkStatus.isConnected && styles.offlineText,
+            ]}>
+            {networkStatus.label}
+          </Text>
         </View>
-
-        <Text style={styles.scannerId}>SCANNER-001</Text>
       </View>
 
       {event ? (
@@ -182,15 +193,17 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#34D399',
   },
+  offlineDot: {
+    backgroundColor: '#EF4444',
+  },
   onlineText: {
     marginLeft: 8,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#FFFFFF',
   },
-  scannerId: {
-    fontSize: 12,
-    color: '#9CA3AF',
+  offlineText: {
+    color: '#F87171',
   },
   eventSelectorRow: {
     marginTop: 20,

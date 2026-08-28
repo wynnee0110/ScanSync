@@ -25,4 +25,14 @@ describe('sync-worker module', () => {
     expect(result.errorCount).toBe(0);
     expect(result.syncedEventIds).toEqual([]);
   });
+
+  it('throws Cannot sync offline error when device is offline', async () => {
+    const originalOnLine = navigator.onLine;
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+    try {
+      await expect(processSyncQueue()).rejects.toThrow('Cannot sync offline');
+    } finally {
+      Object.defineProperty(navigator, 'onLine', { value: originalOnLine, configurable: true });
+    }
+  });
 });

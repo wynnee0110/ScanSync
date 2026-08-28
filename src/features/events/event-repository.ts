@@ -679,3 +679,124 @@ export async function getTodayAttendanceCountForEvent(eventId: string): Promise<
   );
   return row?.count ?? 0;
 }
+
+export type RemoteEventInput = {
+  id: string;
+  name: string;
+  venue: string;
+  starts_at: string;
+  ends_at: string | null;
+  academic_reference_year: number;
+  status: EventStatus;
+  expected_attendees: number;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type RemoteAttendanceInput = {
+  client_record_id: string;
+  event_id: string;
+  participant_reference: string;
+  participant_name: string | null;
+  participant_program: string | null;
+  qr_format?: 'opaque' | 'school_id';
+  year_level: number | null;
+  method: 'qr' | 'manual';
+  recorded_at: string;
+};
+
+/** Upserts remote events from Supabase into local SQLite database. */
+export async function upsertRemoteEventsLocal(remoteEvents: RemoteEventInput[]): Promise<void> {
+  if (remoteEvents.length === 0) return;
+  const database = await requireDatabase();
+  const now = new Date().toISOString();
+
+  await database.withTransactionAsync(async () => {
+    const pendingRows = await database.getAllAsync<{ entity_id: string }>(
+      "SELECT entity_id FROM sync_queue WHERE entity_type = 'event' AND status <> 'synced'",
+    );
+    const pendingIds = new Set(pendingRows.map((r) => r.entity_id));
+
+    for (const event of remoteEvents) {
+      if (pendingIds.has(event.id)) {
+        continue;
+      }
+      const createdAt = event.created_at ?? now;
+      const updatedAt = event.updated_at ?? now;
+      await database.runAsync(
+        `INSERT INTO local_events (
+          id, name, venue, starts_at, ends_at, academic_reference_year, status,
+          expected_attendees, created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          venue = excluded.venue,
+          starts_at = excluded.starts_at,
+          ends_at = excluded.ends_at,
+          academic_reference_year = excluded.academic_reference_year,
+          status = excluded.status,
+          expected_attendees = excluded.expected_attendees,
+          created_by = excluded.created_by,
+          updated_at = excluded.updated_at`,
+        event.id,
+        event.name.trim(),
+        event.venue.trim(),
+        event.starts_at,
+        event.ends_at,
+        event.academic_reference_year,
+        event.status,
+        event.expected_attendees,
+        event.created_by ?? null,
+        createdAt,
+        updatedAt,
+      );
+    }
+  });
+}
+
+/** Upserts remote attendance records from Supabase into local SQLite database. */
+export async function upsertRemoteAttendanceLocal(
+  remoteAttendance: RemoteAttendanceInput[],
+): Promise<void> {
+  if (remoteAttendance.length === 0) return;
+  const database = await requireDatabase();
+
+  await database.withTransactionAsync(async () => {
+    const pendingRows = await database.getAllAsync<{ entity_id: string }>(
+      "SELECT entity_id FROM sync_queue WHERE entity_type = 'attendance_record' AND status <> 'synced'",
+    );
+    const pendingIds = new Set(pendingRows.map((r) => r.entity_id));
+
+    for (const rec of remoteAttendance) {
+      if (pendingIds.has(rec.client_record_id)) {
+        continue;
+      }
+      await database.runAsync(
+        `INSERT INTO local_attendance_records (
+          id, event_id, participant_reference, participant_name, participant_program,
+          qr_format, year_level, method, recorded_at, sync_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+        ON CONFLICT(id) DO UPDATE SET
+          participant_reference = excluded.participant_reference,
+          participant_name = excluded.participant_name,
+          participant_program = excluded.participant_program,
+          qr_format = excluded.qr_format,
+          year_level = excluded.year_level,
+          method = excluded.method,
+          recorded_at = excluded.recorded_at,
+          sync_status = 'synced'`,
+        rec.client_record_id,
+        rec.event_id,
+        rec.participant_reference,
+        rec.participant_name ?? null,
+        rec.participant_program ?? null,
+        rec.qr_format ?? 'opaque',
+        rec.year_level,
+        rec.method,
+        rec.recorded_at,
+      );
+    }
+  });
+}
+

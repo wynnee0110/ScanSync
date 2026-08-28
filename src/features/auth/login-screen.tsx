@@ -19,10 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Palette } from '@/constants/palette';
 import { useAuth } from '@/features/auth/auth-context';
 import { loadStoredOperators, syncOperatorsFromSupabase } from '@/features/operators/operator-store';
-
-// Mock credentials fallback for unconfigured offline local testing
-const MOCK_USERNAME = 'admin';
-const MOCK_PASSWORD = 'password123';
+import { getPreference } from '@/lib/preferences';
 
 function cleanCode(code: string): string {
   return code.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -47,7 +44,7 @@ function matchesPasscode(inputPass: string, opPass: string): boolean {
   const cleanInput = inputPass.trim().toLowerCase();
   const cleanOp = opPass.trim().toLowerCase();
 
-  if (cleanInput === cleanOp || cleanInput === 'password123') return true;
+  if (cleanInput === cleanOp) return true;
 
   const codeA = cleanCode(cleanInput);
   const codeB = cleanCode(cleanOp);
@@ -64,12 +61,21 @@ export function LoginScreen() {
   const { signInWithEmail, signInLocally, isConfigured } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     void syncOperatorsFromSupabase();
+    void (async () => {
+      try {
+        const savedEmail = await getPreference('auth.remembered_email');
+        const savedRemember = await getPreference('auth.remember_me');
+        if (savedEmail) setEmail(savedEmail);
+        if (savedRemember === 'false') setRememberMe(false);
+      } catch { }
+    })();
   }, []);
 
   const handleLogin = async () => {
@@ -88,13 +94,17 @@ export function LoginScreen() {
     if (isConfigured) {
       const { error: authError } = await signInWithEmail(trimmedEmail, trimmedPass);
       if (!authError) {
+        // Supabase Auth succeeded — AuthGuard will navigate to /(tabs) via onAuthStateChange
         setLoading(false);
-        router.replace('/(tabs)' as Href);
         return;
       }
+      // Auth failed — show the exact Supabase error message
+      setLoading(false);
+      setError(authError.message || 'Invalid email or password.');
+      return;
     }
 
-    // Check operator store (for local operators created in Operators Dashboard)
+    // Supabase not configured: check local operator store
     const localOperators = await loadStoredOperators();
     const matchingOp = localOperators.find(
       (op) => matchesEmail(trimmedEmail, op.email) && matchesPasscode(trimmedPass, op.generatedPasswordCode),
@@ -116,44 +126,16 @@ export function LoginScreen() {
         // Fallthrough if status check fails
       }
 
-      signInLocally({
-        id: matchingOp.id,
-        email: matchingOp.email,
-        name: matchingOp.name,
-        role: matchingOp.role,
-        assignedEventId: matchingOp.assignedEventId,
-      });
-      setLoading(false);
-      router.replace('/(tabs)' as Href);
-      return;
-    }
-
-    // Mock fallback accounts
-    if (
-      (trimmedEmail.toLowerCase() === MOCK_USERNAME || matchesEmail(trimmedEmail, 'admin@gmail.com') || matchesEmail(trimmedEmail, 'admin@icpep.org')) &&
-      (trimmedPass === MOCK_PASSWORD || cleanDigits(trimmedPass) === '9901')
-    ) {
-      signInLocally({ id: 'admin-local-1', email: 'admin@gmail.com', name: 'Lead Superadmin', role: 'Superadmin' });
-      setLoading(false);
-      router.replace('/(tabs)' as Href);
-      return;
-    }
-
-    if (
-      matchesEmail(trimmedEmail, 'organizer@gmail.com') &&
-      (trimmedPass === MOCK_PASSWORD || cleanDigits(trimmedPass) === '7720')
-    ) {
-      signInLocally({ id: 'organizer-local-1', email: 'organizer@gmail.com', name: 'Main Organizer', role: 'Organizer' });
-      setLoading(false);
-      router.replace('/(tabs)' as Href);
-      return;
-    }
-
-    if (
-      matchesEmail(trimmedEmail, 'volunteer@gmail.com') &&
-      (trimmedPass === MOCK_PASSWORD || cleanDigits(trimmedPass) === '4821')
-    ) {
-      signInLocally({ id: 'volunteer-local-1', email: 'volunteer@gmail.com', name: 'Primary Volunteer', role: 'Volunteer' });
+      signInLocally(
+        {
+          id: matchingOp.id,
+          email: matchingOp.email,
+          name: matchingOp.name,
+          role: matchingOp.role,
+          assignedEventId: matchingOp.assignedEventId,
+        },
+        rememberMe,
+      );
       setLoading(false);
       router.replace('/(tabs)' as Href);
       return;
@@ -172,7 +154,7 @@ export function LoginScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
-          
+
           {/* BRANDING HEADER */}
           <View style={styles.brandHeader}>
             <View style={styles.logoBadge}>
@@ -242,6 +224,21 @@ export function LoginScreen() {
               </View>
             </View>
 
+            {/* REMEMBER ME TOGGLE */}
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: rememberMe }}
+              accessibilityLabel="Remember me on this device for 30 days"
+              onPress={() => setRememberMe(!rememberMe)}
+              style={styles.rememberRow}>
+              <Ionicons
+                name={rememberMe ? 'checkbox' : 'square-outline'}
+                size={20}
+                color={rememberMe ? '#0F172A' : '#94A3B8'}
+              />
+              <Text style={styles.rememberText}>Remember me for 30 days</Text>
+            </Pressable>
+
             {error && (
               <View style={styles.errorCard}>
                 <Ionicons name="alert-circle" size={16} color={Palette.dangerText} />
@@ -263,8 +260,6 @@ export function LoginScreen() {
               </Text>
             </Pressable>
           </View>
-
-
 
           {/* FOOTER */}
           <Text style={styles.footerText}>ScanSync v1.0.0 • ICpEP.SE</Text>
@@ -360,6 +355,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     fontSize: 14,
     color: '#0F172A',
+  },
+  rememberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    marginTop: 2,
+    gap: 8,
+  },
+  rememberText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#475569',
   },
   errorCard: {
     flexDirection: 'row',

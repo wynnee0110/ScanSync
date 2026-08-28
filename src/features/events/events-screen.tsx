@@ -9,6 +9,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { listEvents } from '@/features/events/event-repository';
 import type { LocalEvent } from '@/features/events/event-types';
 import { EventsSection } from '@/features/events/events-section';
+import { processSyncQueue } from '@/lib/sync-worker';
 
 export function EventsScreen() {
   const { role: userRole } = useAuth();
@@ -26,6 +27,13 @@ export function EventsScreen() {
     try {
       const data = await listEvents();
       setEvents(data);
+
+      void processSyncQueue()
+        .then(async () => {
+          const refreshed = await listEvents();
+          setEvents(refreshed);
+        })
+        .catch(() => {});
     } catch {
       // Keep previous events if fetch fails
     }
