@@ -30,7 +30,7 @@ def fetch_all_operators(
 
     try:
         profiles_resp = client.table("profiles").select(
-            "id, full_name, access_code, created_at"
+            "id, full_name, email, access_code, created_at"
         ).execute()
         profiles_by_id = {str(profile["id"]): profile for profile in (profiles_resp.data or [])}
     except Exception as exc:
@@ -157,55 +157,82 @@ def create_or_update_operator(config, data: Dict[str, Any]) -> Dict[str, Any]:
     assigned_event_id = data.get("assignedEventId")
     created_by = data.get("createdBy")
 
+    auth_user_id = None
     # 1. Create or lookup user in Supabase Auth via Service Role Admin API
     try:
-        auth_res = client.auth.admin.create_user({
-            "email": email,
-            "password": access_code,
-            "email_confirm": True,
-            "user_metadata": {
-                "full_name": name,
-                "role": role,
-                "access_code": access_code,
-                "created_by": created_by,
-                "assigned_event_id": assigned_event_id,
-            },
-        })
-        if auth_res and hasattr(auth_res, "user") and auth_res.user:
-            user_id = auth_res.user.id
+        auth_res = None
+        try:
+            auth_res = client.auth.admin.create_user({
+                "email": email,
+                "password": access_code,
+                "email_confirm": True,
+                "user_metadata": {
+                    "full_name": name,
+                    "role": role,
+                    "access_code": access_code,
+                    "created_by": created_by,
+                    "assigned_event_id": assigned_event_id,
+                },
+            })
+        except Exception as dict_err:
+            logger.info("Dict create_user notice, trying kwarg create_user: %s", dict_err)
+            auth_res = client.auth.admin.create_user(
+                email=email,
+                password=access_code,
+                email_confirm=True,
+                user_metadata={
+                    "full_name": name,
+                    "role": role,
+                    "access_code": access_code,
+                    "created_by": created_by,
+                    "assigned_event_id": assigned_event_id,
+                },
+            )
+
+        if auth_res:
+            if hasattr(auth_res, "user") and auth_res.user and hasattr(auth_res.user, "id"):
+                auth_user_id = str(auth_res.user.id)
+            elif hasattr(auth_res, "id") and auth_res.id:
+                auth_user_id = str(auth_res.id)
+            elif isinstance(auth_res, dict):
+                auth_user_id = auth_res.get("id") or (auth_res.get("user", {}).get("id") if isinstance(auth_res.get("user"), dict) else None)
     except Exception as exc:
         logger.info("Notice create_user in Supabase Auth (user may already exist): %s", exc)
+
+    if not auth_user_id:
         try:
-            users_list = client.auth.admin.list_users()
-            users = users_list if isinstance(users_list, list) else getattr(users_list, "users", [])
-            matching = next((u for u in users if getattr(u, "email", "").lower() == email.lower()), None)
-            if matching:
-                user_id = matching.id
-                try:
-                    client.auth.admin.update_user_by_id(user_id, {
-                        "password": access_code,
-                        "user_metadata": {
-                            "full_name": name,
-                            "role": role,
-                            "access_code": access_code,
-                            "created_by": created_by,
-                            "assigned_event_id": assigned_event_id,
-                        },
-                    })
-                except Exception:
-                    pass
+            users_resp = client.auth.admin.list_users()
+            users_list = users_resp if isinstance(users_resp, list) else getattr(users_resp, "users", [])
+            for u in users_list:
+                u_email = getattr(u, "email", "") or (u.get("email") if isinstance(u, dict) else "")
+                if u_email and u_email.lower() == email.lower():
+                    auth_user_id = str(getattr(u, "id", "") or (u.get("id") if isinstance(u, dict) else ""))
+                    try:
+                        client.auth.admin.update_user_by_id(auth_user_id, {
+                            "password": access_code,
+                            "user_metadata": {
+                                "full_name": name,
+                                "role": role,
+                                "access_code": access_code,
+                                "created_by": created_by,
+                                "assigned_event_id": assigned_event_id,
+                            },
+                        })
+                    except Exception:
+                        pass
+                    break
         except Exception as e2:
             logger.warning("Notice listing auth users: %s", e2)
 
+    if auth_user_id:
+        user_id = auth_user_id
 
-    if not user_id:
-        user_id = data.get("id")
-
-    # 2. Upsert profile fields (access_code, full_name, created_by) with official Auth user_id
+    # 2. Upsert profile fields (email, access_code, full_name) with official Auth user_id
     try:
         client.table("profiles").upsert({
             "id": user_id,
             "full_name": name,
+            "email": email,
             "access_code": access_code,
         }, on_conflict="id").execute()
     except Exception as e:

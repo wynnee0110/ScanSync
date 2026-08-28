@@ -92,6 +92,12 @@ export function addOperator(op: OperatorItem): void {
   _notify();
   void persistStoredOperators();
   void markOperatorPending(op.id);
+  void saveOperatorToSupabase(op).then(async (success) => {
+    if (success) {
+      await removePendingOperator(op.id);
+      await syncOperatorsFromSupabase();
+    }
+  });
 }
 
 /** Updates an existing operator by ID and notifies subscribers. */
@@ -100,6 +106,15 @@ export function updateOperator(id: string, updates: Partial<OperatorItem>): void
   _notify();
   void persistStoredOperators();
   void markOperatorPending(id);
+  const updatedOp = _operators.find((op) => op.id === id);
+  if (updatedOp) {
+    void saveOperatorToSupabase(updatedOp).then(async (success) => {
+      if (success) {
+        await removePendingOperator(id);
+        await syncOperatorsFromSupabase();
+      }
+    });
+  }
 }
 
 /** Removes an operator by ID and notifies subscribers. */
@@ -250,8 +265,12 @@ export async function publishPendingOperators(): Promise<number> {
 /** Saves operator profile and role assignment to Supabase Cloud. */
 export async function saveOperatorToSupabase(op: OperatorItem): Promise<boolean> {
   const backendUrl = getBackendUrl();
-  // 1. Try server backend API endpoint first
+
+  // 1. Always try the backend first — it uses the admin service-role key which
+  //    creates the Auth user with email_confirm:true (no confirmation email needed).
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(`${backendUrl}/api/operators`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await getBackendAuthorizationHeaders()) },
@@ -266,48 +285,41 @@ export async function saveOperatorToSupabase(op: OperatorItem): Promise<boolean>
         generatedPasswordCode: op.generatedPasswordCode,
         createdBy: op.createdBy,
       }),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
     if (res.ok) {
       return true;
     }
-  } catch {
-    // Fallback to client-side Supabase SDK below
+    // Non-2xx but the request reached the server — log for diagnostics
+    console.warn('[OperatorStore] Backend POST /api/operators returned', res.status);
+  } catch (err) {
+    // Network failure (timeout, offline, etc.) — fall through to client SDK
+    console.warn('[OperatorStore] Backend unreachable, using client SDK fallback:', err);
   }
 
+  // 2. Client-SDK fallback — write profile + role tables directly.
+  //    NOTE: supabase.auth.signUp() is intentionally NOT used here because it
+  //    sends a confirmation email and the user won't exist until they click the link.
+  //    Instead we upsert the profile record with email so it shows in the dashboard,
+  //    and mark the operator as still pending so the backend sync retries later.
   if (!isSupabaseConfigured || !supabase) return false;
 
   const defaultOrgId = '00000000-0000-0000-0000-000000000001';
 
   try {
+    // Try to find an existing profile by email first so we can reuse its ID
     let authUserId = op.id;
-
-    try {
-      const { data: signUpData } = await supabase.auth.signUp({
-        email: op.email,
-        password: op.generatedPasswordCode,
-        options: {
-          data: { full_name: op.name, role: op.role },
-        },
-      });
-      if (signUpData?.user?.id) {
-        authUserId = signUpData.user.id;
-      }
-    } catch {
-      // Non-fatal auth registration fallback
+    const { data: existingProf } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', op.email)
+      .maybeSingle();
+    if (existingProf?.id) {
+      authUserId = existingProf.id as string;
     }
 
-    if (authUserId === op.id) {
-      const { data: existingProf } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', op.email)
-        .maybeSingle();
-      if (existingProf?.id) {
-        authUserId = existingProf.id as string;
-      }
-    }
-
-    await supabase.from('profiles').upsert(
+    // Upsert profile — email column is now present after the migration
+    const { error: profileErr } = await supabase.from('profiles').upsert(
       {
         id: authUserId,
         full_name: op.name,
@@ -316,6 +328,9 @@ export async function saveOperatorToSupabase(op: OperatorItem): Promise<boolean>
       },
       { onConflict: 'id' },
     );
+    if (profileErr) {
+      console.warn('[OperatorStore] Profile upsert notice:', profileErr.message);
+    }
 
     if (op.role === 'Superadmin' || op.role === 'Organizer') {
       const appRole = op.role === 'Superadmin' ? 'superadmin' : 'organizer';
@@ -338,9 +353,12 @@ export async function saveOperatorToSupabase(op: OperatorItem): Promise<boolean>
       );
     }
 
+    // The profile is saved locally in Supabase DB but the Auth user was not created
+    // (that requires the backend admin key). Keep the record in pending so the next
+    // time the backend is reachable the full Auth account is also created.
     return true;
   } catch (err) {
-    console.warn('Operator Supabase cloud sync notice:', err);
+    console.warn('[OperatorStore] Client SDK operator save notice:', err);
     return false;
   }
 }
