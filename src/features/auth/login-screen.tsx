@@ -177,7 +177,7 @@ export function LoginScreen() {
                     setEmail(val);
                     setError(null);
                   }}
-                  placeholder="name@icpep.org"
+                  placeholder="email"
                   placeholderTextColor="#CBD5E1"
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -198,7 +198,7 @@ export function LoginScreen() {
                     setPassword(val);
                     setError(null);
                   }}
-                  placeholder="Enter passcode"
+                  placeholder="password"
                   placeholderTextColor="#CBD5E1"
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
@@ -224,7 +224,7 @@ export function LoginScreen() {
             <Pressable
               accessibilityRole="checkbox"
               accessibilityState={{ checked: rememberMe }}
-              accessibilityLabel="Remember me on this device for 30 days"
+              accessibilityLabel="Remember me"
               onPress={() => setRememberMe(!rememberMe)}
               style={styles.rememberRow}>
               <Ionicons
@@ -232,7 +232,7 @@ export function LoginScreen() {
                 size={20}
                 color={rememberMe ? '#0F172A' : '#94A3B8'}
               />
-              <Text style={styles.rememberText}>Remember me for 30 days</Text>
+              <Text style={styles.rememberText}>Remember me?</Text>
             </Pressable>
 
             {error && (
