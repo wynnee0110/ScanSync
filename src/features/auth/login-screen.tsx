@@ -155,14 +155,14 @@ export function LoginScreen() {
           <View style={styles.brandHeader}>
             <View style={styles.logoBadge}>
               <Image
-                source={require('@/assets/images/icpeplogo.png')}
+                source={require('@/assets/images/Logo.png')}
                 style={styles.logoImage}
-                resizeMode="contain"
+                resizeMode="cover"
               />
             </View>
 
-            <Text style={styles.brandTitle}>ICpEP.SE</Text>
-            <Text style={styles.brandSubtitle}>ScanSync Attendance Portal</Text>
+            <Text style={styles.brandTitle}>ScanSync</Text>
+            <Text style={styles.brandSubtitle}>Attendance Portal</Text>
           </View>
 
           {/* MINIMAL CARD */}
@@ -284,27 +284,28 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   logoBadge: {
-    width: 88,
-    height: 88,
-    borderRadius: 24,
+    width: 128,
+    height: 128,
+    borderRadius: 28,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#F1F5F9',
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 6,
   },
   logoImage: {
-    width: 64,
-    height: 64,
+    width: '100%',
+    height: '100%',
   },
   brandTitle: {
     marginTop: 16,
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
     color: '#0F172A',
     letterSpacing: -0.4,

@@ -108,7 +108,7 @@ export function ProfileScreen() {
               <Text style={styles.profileName} numberOfLines={1}>
                 {userName || userEmail}
               </Text>
-              <Text style={styles.profileRole}>{role}</Text>
+              <Text style={styles.profileRole}>{role ?? 'Operator'}</Text>
               <View style={styles.activeRow}>
                 <View style={styles.activeDot} />
                 <Text style={styles.activeText}>Active</Text>

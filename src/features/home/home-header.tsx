@@ -23,7 +23,7 @@ export function HomeHeader() {
     <View style={styles.header}>
       <View>
         <Text style={styles.greeting}>Welcome back</Text>
-        <Text style={styles.title}>{role}</Text>
+        <Text style={styles.title}>{role ?? 'Operator'}</Text>
       </View>
 
       <View style={styles.avatar}>

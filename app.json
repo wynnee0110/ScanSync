@@ -4,16 +4,16 @@
     "slug": "attendance-manager",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icpeplogo.png",
+    "icon": "./assets/images/Logo.png",
     "scheme": "scansync",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/icpeplogo.png"
+      "icon": "./assets/images/Logo.png"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
-        "foregroundImage": "./assets/images/icpeplogo.png"
+        "foregroundImage": "./assets/images/Logo.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -25,7 +25,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/icpeplogo.png"
+      "favicon": "./assets/images/Logo.png"
     },
     "plugins": [
       "expo-router",
@@ -33,7 +33,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#111827",
-          "image": "./assets/images/icpeplogo.png",
+          "image": "./assets/images/Logo.png",
           "imageWidth": 120
         }
       ],

@@ -7,6 +7,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
+const SPLASH_DURATION = 750;
 
 export function AnimatedSplashOverlay() {
   const [animate, setAnimate] = useState(false);
@@ -16,20 +17,28 @@ export function AnimatedSplashOverlay() {
 
   const splashKeyframe = new Keyframe({
     0: {
-      transform: [{ scale: 1 }],
+      transform: [{ scale: 1 }, { translateY: 0 }],
       opacity: 1,
     },
     20: {
+      transform: [{ scale: 0.92 }, { translateY: 8 }],
       opacity: 1,
+      easing: Easing.out(Easing.quad),
     },
-    70: {
-      opacity: 0,
-      easing: Easing.elastic(0.7),
+    50: {
+      transform: [{ scale: 1.16 }, { translateY: -18 }],
+      opacity: 1,
+      easing: Easing.out(Easing.cubic),
+    },
+    75: {
+      transform: [{ scale: 0.97 }, { translateY: 3 }],
+      opacity: 0.85,
+      easing: Easing.inOut(Easing.quad),
     },
     100: {
+      transform: [{ scale: 1.05 }, { translateY: -6 }],
       opacity: 0,
-      transform: [{ scale: 1 }],
-      easing: Easing.elastic(0.7),
+      easing: Easing.out(Easing.quad),
     },
   });
 
@@ -37,7 +46,7 @@ export function AnimatedSplashOverlay() {
 
   return animate ? (
     <Animated.View
-      entering={splashKeyframe.duration(DURATION).withCallback((finished) => {
+      entering={splashKeyframe.duration(SPLASH_DURATION).withCallback((finished) => {
         'worklet';
         if (finished) {
           scheduleOnRN(setVisible, false);

@@ -24,7 +24,7 @@ interface AuthContextType {
   session: Session | null;
   user: User | null;
   localUser: LocalUser | null;
-  role: OperatorRole;
+  role: OperatorRole | null;
   assignedEventId: string | null;
   loading: boolean;
   isConfigured: boolean;
@@ -37,7 +37,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   localUser: null,
-  role: 'Superadmin',
+  role: null,
   assignedEventId: null,
   loading: true,
   isConfigured: false,
@@ -264,11 +264,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const computedRole: OperatorRole =
-    localUser?.role ??
-    dbRole ??
-    (session?.user?.user_metadata?.role as OperatorRole) ??
-    'Superadmin';
+  const isAuthenticated = Boolean(session || localUser);
+
+  const computedRole: OperatorRole | null = isAuthenticated
+    ? (localUser?.role ??
+       dbRole ??
+       (session?.user?.user_metadata?.role as OperatorRole) ??
+       'Volunteer')
+    : null;
 
   const computedEventId: string | null =
     localUser?.assignedEventId ??
