@@ -8,7 +8,7 @@ import { HotToast, type ToastMessage } from '@/components/hot-toast';
 import { Palette } from '@/constants/palette';
 import { useAuth } from '@/features/auth/auth-context';
 import { listEvents } from '@/features/events/event-repository';
-import type { LocalEvent } from '@/features/events/event-types';
+import { isEventCreatedByUser, type LocalEvent } from '@/features/events/event-types';
 import { AddOperatorModal } from '@/features/operators/add-operator-modal';
 import { OperatorCard } from '@/features/operators/operator-card';
 import {
@@ -44,7 +44,7 @@ export default function OperatorsScreenDashboard() {
 
   const organizerEvents = events.filter(
     (e) =>
-      (e.createdBy && e.createdBy.toLowerCase() === userEmail) ||
+      isEventCreatedByUser(e.createdBy, user, localUser) ||
       e.id === userAssignedEventId,
   );
 
@@ -178,7 +178,7 @@ export default function OperatorsScreenDashboard() {
       generatedPasswordCode: finalPassword,
       scansCount: 0,
       createdAt: new Date().toISOString(),
-      createdBy: userEmail,
+      createdBy: user?.id || localUser?.id || userEmail,
     };
 
     addOperator(newOperator);
@@ -234,7 +234,7 @@ export default function OperatorsScreenDashboard() {
 
     if (isOrganizerViewer) {
       const organizerEventIds = new Set(organizerEvents.map((e) => e.id));
-      const isCreatedByMe = Boolean(targetOp?.createdBy && targetOp.createdBy.toLowerCase() === userEmail);
+      const isCreatedByMe = isEventCreatedByUser(targetOp?.createdBy, user, localUser);
       const isAssignedToMyEvent = Boolean(targetOp?.assignedEventId && organizerEventIds.has(targetOp.assignedEventId));
       if (targetOp?.role !== 'Volunteer' || (!isCreatedByMe && !isAssignedToMyEvent)) {
         Alert.alert('Action Restricted', 'Organizers can only manage Volunteers assigned to their events.');
@@ -268,7 +268,7 @@ export default function OperatorsScreenDashboard() {
     // Organizer view: show volunteers created by or assigned to events created/managed by this organizer.
     if (isOrganizerViewer) {
       const organizerEventIds = new Set(organizerEvents.map((e) => e.id));
-      const isCreatedByMe = Boolean(op.createdBy && op.createdBy.toLowerCase() === userEmail);
+      const isCreatedByMe = isEventCreatedByUser(op.createdBy, user, localUser);
       const isAssignedToMyEvent = Boolean(op.assignedEventId && organizerEventIds.has(op.assignedEventId));
       return (
         op.role === 'Volunteer' &&

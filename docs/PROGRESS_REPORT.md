@@ -10,6 +10,21 @@
 
 **Working tree before this documentation update:** clean
 
+## 2026-09-02 operator revocation deletion & session eviction update
+
+- Fixed bug where revoking/deleting an operator did not purge the Supabase Auth user or kick the user out of the app.
+- Updated `delete_operator` in `backend/operator_service.py` and `backend/main.py` to resolve and purge operator records from Supabase Auth (`client.auth.admin.delete_user`), `profiles`, `memberships`, and `event_volunteers` by both User ID and Email.
+- Updated `removeOperator` and `deleteOperatorFromSupabase` in `src/features/operators/operator-store.ts` to capture operator metadata before store removal and pass both ID and Email to cloud deletion.
+- Updated `src/features/auth/auth-context.tsx` so that local or Supabase Auth sessions belonging to revoked or deleted operator accounts immediately trigger `signOut()`, forcing `AuthGuard` to redirect the user to `/(auth)/login`.
+
+## 2026-09-02 event creation ownership scoping update
+
+- Fixed issue where events created by an Organizer logged in via Supabase Auth would disappear from the Organizer's event list after creation/sync.
+- Added `isEventCreatedByUser` helper in `src/features/events/event-types.ts` that checks event ownership against both user email and Supabase user UUID (`user.id` / `localUser.id`).
+- Updated event creation in `src/features/events/events-section.tsx` to set `createdBy` to `user.id || localUser.id || effectiveUserEmail`, matching Supabase remote schema.
+- Updated event filtering in `events-section.tsx`, `home-screen.tsx`, `scanner-screen.tsx`, `history-section.tsx`, `event-detail-screen.tsx`, `operators-screen-dashboard.tsx`, and `user-detail-screen.tsx` to use `isEventCreatedByUser`.
+- Added `created_by TEXT` directly to `local_events` `CREATE TABLE` definition in `src/lib/local-database.ts`.
+
 ## 2026-08-27 automated sync export integration update
 
 - Removed manual export UI buttons to streamline the user workflow.

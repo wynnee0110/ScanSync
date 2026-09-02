@@ -288,54 +288,59 @@ def create_or_update_operator(config, data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 
-def delete_operator(config, user_id: str) -> Dict[str, Any]:
+def delete_operator(config, identifier: str) -> Dict[str, Any]:
     client = _get_supabase_client(config)
-    target_email = None
+    target_id = identifier
+    target_email = identifier if "@" in identifier else None
 
     try:
-        prof_resp = client.table("profiles").select("id, email").eq("id", user_id).execute()
+        if "@" in identifier:
+            prof_resp = client.table("profiles").select("id, email").eq("email", identifier).execute()
+        else:
+            prof_resp = client.table("profiles").select("id, email").eq("id", identifier).execute()
+
         if prof_resp.data:
-            target_email = prof_resp.data[0].get("email")
+            target_id = str(prof_resp.data[0].get("id") or target_id)
+            target_email = prof_resp.data[0].get("email") or target_email
     except Exception:
         pass
 
-    # 1. Delete from event_volunteers
     try:
-        client.table("event_volunteers").delete().eq("user_id", user_id).execute()
-    except Exception:
-        pass
+        users_list = client.auth.admin.list_users()
+        users = users_list if isinstance(users_list, list) else getattr(users_list, "users", [])
+        for u in users:
+            u_id = str(getattr(u, "id", ""))
+            u_email = str(getattr(u, "email", "")).lower()
+            if (target_id and u_id == target_id) or (target_email and u_email == target_email.lower()):
+                target_id = u_id
+                target_email = u_email
+                try:
+                    client.auth.admin.delete_user(u_id)
+                    logger.info("Deleted Supabase Auth user %s (%s)", u_id, u_email)
+                except Exception as del_err:
+                    logger.warning("Notice deleting auth user %s: %s", u_id, del_err)
+    except Exception as auth_err:
+        logger.warning("Notice listing auth users during deletion: %s", auth_err)
 
-    # 2. Delete from memberships
-    try:
-        client.table("memberships").delete().eq("user_id", user_id).execute()
-    except Exception:
-        pass
-
-    # 3. Delete from profiles
-    try:
-        client.table("profiles").delete().eq("id", user_id).execute()
-        if target_email:
-            client.table("profiles").delete().eq("email", target_email).execute()
-    except Exception:
-        pass
-
-    # 4. Delete from Supabase Auth admin API
-    try:
-        client.auth.admin.delete_user(user_id)
-    except Exception as exc:
-        logger.info("Notice delete_user in Supabase Auth: %s", exc)
+    if target_id:
+        try:
+            client.table("event_volunteers").delete().eq("user_id", target_id).execute()
+        except Exception:
+            pass
+        try:
+            client.table("memberships").delete().eq("user_id", target_id).execute()
+        except Exception:
+            pass
+        try:
+            client.table("profiles").delete().eq("id", target_id).execute()
+        except Exception:
+            pass
 
     if target_email:
         try:
-            users_list = client.auth.admin.list_users()
-            users = users_list if isinstance(users_list, list) else getattr(users_list, "users", [])
-            for u in users:
-                if getattr(u, "email", "").lower() == target_email.lower():
-                    try:
-                        client.auth.admin.delete_user(u.id)
-                    except Exception:
-                        pass
-        except Exception as auth_err:
-            logger.info("Notice deleting auth user by email: %s", auth_err)
+            client.table("profiles").delete().eq("email", target_email).execute()
+        except Exception:
+            pass
 
-    return {"status": "deleted", "id": user_id}
+    return {"status": "deleted", "id": identifier}
+

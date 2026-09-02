@@ -87,3 +87,17 @@ export type UpdateAttendanceInput = {
 };
 
 export type UpdateAttendanceResult = { status: 'updated' } | { status: 'duplicate' };
+
+export function isEventCreatedByUser(
+  createdBy: string | null | undefined,
+  user?: { id?: string | null; email?: string | null } | null,
+  localUser?: { id?: string | null; email?: string | null } | null,
+): boolean {
+  if (!createdBy) return false;
+  const cb = createdBy.trim().toLowerCase();
+  if (user?.id && cb === user.id.trim().toLowerCase()) return true;
+  if (user?.email && cb === user.email.trim().toLowerCase()) return true;
+  if (localUser?.id && cb === localUser.id.trim().toLowerCase()) return true;
+  if (localUser?.email && cb === localUser.email.trim().toLowerCase()) return true;
+  return false;
+}

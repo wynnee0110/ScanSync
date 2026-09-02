@@ -246,9 +246,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   infoText: {
-    flex: 1,
+    flex: 0,
     fontSize: 13,
     color: '#D1D5DB',
+
   },
   divider: {
     marginTop: 16,

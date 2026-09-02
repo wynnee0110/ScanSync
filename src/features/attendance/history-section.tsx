@@ -16,7 +16,7 @@ import {
 import { Palette } from '@/constants/palette';
 import { formatYearLevel, YEAR_LEVELS } from '@/features/attendance/year-level';
 import { deleteAttendanceRecord, updateAttendanceRecord } from '@/features/events/event-repository';
-import type { AttendanceHistoryItem, LocalEvent, YearLevel } from '@/features/events/event-types';
+import { isEventCreatedByUser, type AttendanceHistoryItem, type LocalEvent, type YearLevel } from '@/features/events/event-types';
 import { useAuth } from '@/features/auth/auth-context';
 
 
@@ -48,7 +48,6 @@ type HistorySectionProps = {
 export function HistorySection({ items, events, onChanged }: HistorySectionProps) {
   const { user, localUser, role: userRole, assignedEventId } = useAuth();
   const isVolunteer = userRole === 'Volunteer';
-  const userEmail = (localUser?.email || user?.email || '').toLowerCase();
 
   const scopedEvents = useMemo(() => {
     if (userRole === 'Superadmin') {
@@ -57,7 +56,7 @@ export function HistorySection({ items, events, onChanged }: HistorySectionProps
     if (userRole === 'Organizer') {
       return events.filter(
         (e) =>
-          (e.createdBy && e.createdBy.toLowerCase() === userEmail) ||
+          isEventCreatedByUser(e.createdBy, user, localUser) ||
           e.id === assignedEventId,
       );
     }
@@ -65,7 +64,7 @@ export function HistorySection({ items, events, onChanged }: HistorySectionProps
       return events.filter((e) => e.id === assignedEventId);
     }
     return events;
-  }, [events, userRole, userEmail, assignedEventId]);
+  }, [events, userRole, user, localUser, assignedEventId]);
 
   const scopedEventIds = useMemo(() => new Set(scopedEvents.map((e) => e.id)), [scopedEvents]);
 

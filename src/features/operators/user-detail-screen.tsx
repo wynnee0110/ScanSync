@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Palette } from '@/constants/palette';
 import { useAuth } from '@/features/auth/auth-context';
 import { listEvents } from '@/features/events/event-repository';
-import type { LocalEvent } from '@/features/events/event-types';
+import { isEventCreatedByUser, type LocalEvent } from '@/features/events/event-types';
 import {
   getOperatorAccessStatus,
   MOCK_OPERATOR_LOGS,
@@ -18,7 +18,6 @@ import { getOperators, removeOperator, subscribeOperators, updateOperator } from
 export function UserDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, localUser, role: userRole, assignedEventId: userAssignedEventId } = useAuth();
-  const userEmail = (localUser?.email || user?.email || '').toLowerCase();
   const isOrganizerViewer = userRole === 'Organizer';
 
   const [showPassword, setShowPassword] = useState(false);
@@ -37,10 +36,10 @@ export function UserDetailScreen() {
   const organizerEvents = useMemo(() => {
     return events.filter(
       (e) =>
-        (e.createdBy && e.createdBy.toLowerCase() === userEmail) ||
+        isEventCreatedByUser(e.createdBy, user, localUser) ||
         e.id === userAssignedEventId,
     );
-  }, [events, userEmail, userAssignedEventId]);
+  }, [events, user, localUser, userAssignedEventId]);
 
   const operator = operators.find(
     (op) => op.id === id || (id && op.email.toLowerCase() === id.toLowerCase()),
@@ -87,7 +86,7 @@ export function UserDetailScreen() {
 
     if (isOrganizerViewer) {
       const organizerEventIds = new Set(organizerEvents.map((e) => e.id));
-      const isCreatedByMe = Boolean(operator.createdBy && operator.createdBy.toLowerCase() === userEmail);
+      const isCreatedByMe = isEventCreatedByUser(operator.createdBy, user, localUser);
       const isAssignedToMyEvent = Boolean(operator.assignedEventId && organizerEventIds.has(operator.assignedEventId));
       if (operator.role !== 'Volunteer' || (!isCreatedByMe && !isAssignedToMyEvent)) {
         Alert.alert('Action Restricted', 'Organizers can only manage Volunteers assigned to their events.');

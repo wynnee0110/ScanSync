@@ -11,7 +11,7 @@ import {
   getTodayAttendanceCountForEvent,
   listEvents,
 } from '@/features/events/event-repository';
-import type { DashboardStats, LocalEvent } from '@/features/events/event-types';
+import { isEventCreatedByUser, type DashboardStats, type LocalEvent } from '@/features/events/event-types';
 
 import { getOperators, subscribeOperators } from '@/features/operators/operator-store';
 import type { OperatorItem } from '@/features/operators/operator-types';
@@ -76,7 +76,6 @@ export function HomeScreen() {
   );
 
   const { user, localUser, role: userRole, assignedEventId } = useAuth();
-  const userEmail = (localUser?.email || user?.email || '').toLowerCase();
 
   const scopedEvents = useMemo(() => {
     if (userRole === 'Superadmin') {
@@ -85,7 +84,7 @@ export function HomeScreen() {
     if (userRole === 'Organizer') {
       return events.filter(
         (e) =>
-          (e.createdBy && e.createdBy.toLowerCase() === userEmail) ||
+          isEventCreatedByUser(e.createdBy, user, localUser) ||
           e.id === assignedEventId,
       );
     }
@@ -93,7 +92,7 @@ export function HomeScreen() {
       return events.filter((e) => e.id === assignedEventId);
     }
     return events;
-  }, [events, userRole, userEmail, assignedEventId]);
+  }, [events, userRole, user, localUser, assignedEventId]);
 
   const scopedEventIds = useMemo(() => new Set(scopedEvents.map((e) => e.id)), [scopedEvents]);
 
@@ -119,14 +118,14 @@ export function HomeScreen() {
       const managedVolunteers = operators.filter(
         (op) =>
           op.role === 'Volunteer' &&
-          ((op.createdBy && op.createdBy.toLowerCase() === userEmail) ||
+          (isEventCreatedByUser(op.createdBy, user, localUser) ||
             (op.assignedEventId && scopedEventIds.has(op.assignedEventId))),
       );
       const count = managedVolunteers.length;
       return `${count} ${count === 1 ? 'volunteer' : 'volunteers'}`;
     }
     return 'Active';
-  }, [userRole, operators, userEmail, scopedEventIds]);
+  }, [userRole, operators, user, localUser, scopedEventIds]);
 
   const selectedEvent =
     scopedEvents.find((event) => event.id === storedSelectedEventId) ??

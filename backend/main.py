@@ -239,11 +239,15 @@ def save_operator(body: OperatorPayload, config: Annotated[Config, Depends(get_c
 
 
 @app.delete("/api/operators/{operator_id}", tags=["Operators"])
-def remove_operator(operator_id: str, config: Annotated[Config, Depends(get_config)]):
+def remove_operator(
+    operator_id: str,
+    user_id: Annotated[str, Depends(get_current_user_id)],
+    config: Annotated[Config, Depends(get_config)],
+):
     try:
         return delete_operator(config, operator_id)
     except Exception as exc:
-        logger.exception("Error in DELETE /api/operators/{operator_id}")
+        logger.exception("Error in DELETE /api/operators/{operator_id} requested by %s", user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),

@@ -119,11 +119,12 @@ export function updateOperator(id: string, updates: Partial<OperatorItem>): void
 
 /** Removes an operator by ID and notifies subscribers. */
 export function removeOperator(id: string): void {
+  const targetOp = _operators.find((op) => op.id === id);
   _operators = _operators.filter((op) => op.id !== id);
   _notify();
   void persistStoredOperators();
   void removePendingOperator(id);
-  void deleteOperatorFromSupabase(id);
+  void deleteOperatorFromSupabase(id, targetOp?.email);
 }
 
 async function getPendingOperatorIds(): Promise<Set<string>> {
@@ -364,14 +365,14 @@ export async function saveOperatorToSupabase(op: OperatorItem): Promise<boolean>
 }
 
 /** Deletes operator profile and role assignments from Supabase Cloud. */
-export async function deleteOperatorFromSupabase(id: string): Promise<void> {
-  const targetOp = _operators.find((op) => op.id === id);
+export async function deleteOperatorFromSupabase(id: string, email?: string): Promise<void> {
   const backendUrl = getBackendUrl();
-  // 1. Try server backend API endpoint first with a 1.5s timeout
+  // 1. Try server backend API endpoint first with a 3s timeout
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
-    const res = await fetch(`${backendUrl}/api/operators/${id}`, {
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const identifier = email || id;
+    const res = await fetch(`${backendUrl}/api/operators/${encodeURIComponent(identifier)}`, {
       method: 'DELETE',
       headers: await getBackendAuthorizationHeaders(),
       signal: controller.signal,
@@ -389,8 +390,8 @@ export async function deleteOperatorFromSupabase(id: string): Promise<void> {
     await supabase.from('event_volunteers').delete().eq('user_id', id);
     await supabase.from('memberships').delete().eq('user_id', id);
     await supabase.from('profiles').delete().eq('id', id);
-    if (targetOp?.email) {
-      await supabase.from('profiles').delete().eq('email', targetOp.email);
+    if (email) {
+      await supabase.from('profiles').delete().eq('email', email);
     }
   } catch (err) {
     console.warn('Notice deleting operator from Supabase:', err);

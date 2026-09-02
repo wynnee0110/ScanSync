@@ -23,7 +23,7 @@ import {
   toggleEventStatus,
   updateEvent,
 } from '@/features/events/event-repository';
-import type { EventStatus, LocalEvent } from '@/features/events/event-types';
+import { EventStatus, LocalEvent, isEventCreatedByUser } from '@/features/events/event-types';
 import { formatEventStatus, formatEventTimeRange } from '@/features/events/formatters';
 import { useAuth } from '@/features/auth/auth-context';
 
@@ -147,7 +147,7 @@ export function EventsSection({ events, onEventCreated }: EventsSectionProps) {
     if (userRole === 'Organizer') {
       return events.filter(
         (e) =>
-          (e.createdBy && e.createdBy.toLowerCase() === effectiveUserEmail) ||
+          isEventCreatedByUser(e.createdBy, user, localUser) ||
           e.id === assignedEventId,
       );
     }
@@ -155,7 +155,7 @@ export function EventsSection({ events, onEventCreated }: EventsSectionProps) {
       return events.filter((e) => e.id === assignedEventId);
     }
     return events;
-  }, [events, userRole, effectiveUserEmail, assignedEventId]);
+  }, [events, userRole, user, localUser, assignedEventId]);
 
   const activeCount = useMemo(() => scopedEvents.filter((e) => e.status === 'active').length, [scopedEvents]);
   const draftCount = useMemo(() => scopedEvents.filter((e) => e.status === 'draft').length, [scopedEvents]);
@@ -298,7 +298,7 @@ export function EventsSection({ events, onEventCreated }: EventsSectionProps) {
           academicReferenceYear: referenceYear,
           status,
           expectedAttendees: expected,
-          createdBy: effectiveUserEmail,
+          createdBy: user?.id || localUser?.id || effectiveUserEmail,
         });
       }
       closeForm();
@@ -319,6 +319,8 @@ export function EventsSection({ events, onEventCreated }: EventsSectionProps) {
     onEventCreated,
     status,
     time,
+    user,
+    localUser,
     effectiveUserEmail,
     venue,
   ]);

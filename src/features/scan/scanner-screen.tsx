@@ -22,7 +22,7 @@ import {
   YEAR_LEVELS,
 } from '@/features/attendance/year-level';
 import { listActiveEvents, recordQrAttendance } from '@/features/events/event-repository';
-import type { AttendanceQrParticipant, LocalEvent, YearLevel } from '@/features/events/event-types';
+import { isEventCreatedByUser, type AttendanceQrParticipant, type LocalEvent, type YearLevel } from '@/features/events/event-types';
 import { parseAttendanceQrPayload } from '@/features/scan/qr-payload';
 import { ScannerManualEntry } from '@/features/scan/scanner-manual-entry';
 import {
@@ -115,7 +115,6 @@ export function ScannerScreen() {
   );
 
   const { user, localUser, role: userRole, assignedEventId } = useAuth();
-  const userEmail = (localUser?.email || user?.email || '').toLowerCase();
 
   const loadEvents = useCallback(async () => {
     try {
@@ -127,7 +126,7 @@ export function ScannerScreen() {
         if (userRole === 'Superadmin') return true;
         if (userRole === 'Organizer') {
           return (
-            (e.createdBy && e.createdBy.toLowerCase() === userEmail) ||
+            isEventCreatedByUser(e.createdBy, user, localUser) ||
             e.id === assignedEventId
           );
         }
@@ -150,7 +149,7 @@ export function ScannerScreen() {
         detail: 'The active event list could not be loaded.',
       });
     }
-  }, [userRole, userEmail, assignedEventId]);
+  }, [userRole, user, localUser, assignedEventId]);
 
   useFocusEffect(
     useCallback(() => {

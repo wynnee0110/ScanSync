@@ -132,40 +132,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           (localUser.email && op.email.toLowerCase() === localUser.email.toLowerCase()),
       );
 
-      if (matchingOp) {
-        void (async () => {
-          try {
-            const realEvents = await listEvents().catch(() => []);
-            const accessStatus = getOperatorAccessStatus(matchingOp, realEvents);
-            if (accessStatus.isRevoked) {
-              void signOut();
-              return;
-            }
-          } catch {}
-
-          setLocalUser((prev) => {
-            if (!prev) return null;
-            if (
-              prev.role !== matchingOp.role ||
-              prev.assignedEventId !== matchingOp.assignedEventId ||
-              prev.email !== matchingOp.email ||
-              prev.name !== matchingOp.name
-            ) {
-              return {
-                ...prev,
-                id: matchingOp.id,
-                name: matchingOp.name,
-                email: matchingOp.email,
-                role: matchingOp.role,
-                assignedEventId: matchingOp.assignedEventId,
-              };
-            }
-            return prev;
-          });
-        })();
+      if (!matchingOp) {
+        // Operator account was deleted from operator store: evict session immediately
+        void signOut();
+        return;
       }
-      // Note: do NOT sign out users who are authenticated via Supabase Auth (session).
-      // Only local operator accounts (no Supabase session) are evicted when removed from the operator store.
+
+      void (async () => {
+        try {
+          const realEvents = await listEvents().catch(() => []);
+          const accessStatus = getOperatorAccessStatus(matchingOp, realEvents);
+          if (accessStatus.isRevoked) {
+            void signOut();
+            return;
+          }
+        } catch {}
+
+        setLocalUser((prev) => {
+          if (!prev) return null;
+          if (
+            prev.role !== matchingOp.role ||
+            prev.assignedEventId !== matchingOp.assignedEventId ||
+            prev.email !== matchingOp.email ||
+            prev.name !== matchingOp.name
+          ) {
+            return {
+              ...prev,
+              id: matchingOp.id,
+              name: matchingOp.name,
+              email: matchingOp.email,
+              role: matchingOp.role,
+              assignedEventId: matchingOp.assignedEventId,
+            };
+          }
+          return prev;
+        });
+      })();
     });
     return unsub;
   }, [localUser?.id, localUser?.email]);
@@ -204,6 +206,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isMounted && volunteer) {
           setDbRole('Volunteer');
           setDbEventId(volunteer.event_id as string);
+          return;
+        }
+
+        if (isMounted && !membership && !volunteer) {
+          // Supabase Auth user has no active membership or volunteer role assignment: evict session
+          setDbRole(null);
+          setDbEventId(null);
+          void signOut();
         }
       } catch {
         // Fallback to metadata / localUser if fetch fails

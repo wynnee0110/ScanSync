@@ -31,7 +31,7 @@ import {
   toggleEventStatus,
   updateEvent,
 } from '@/features/events/event-repository';
-import type { AttendanceHistoryItem, EventStatus, LocalEvent } from '@/features/events/event-types';
+import { isEventCreatedByUser, type AttendanceHistoryItem, type EventStatus, type LocalEvent } from '@/features/events/event-types';
 import { formatEventStatus, formatEventTimeRange } from '@/features/events/formatters';
 import { processSyncQueue } from '@/lib/sync-worker';
 import { useAuth } from '@/features/auth/auth-context';
@@ -109,7 +109,6 @@ export function EventDetailScreen({ eventId }: EventDetailScreenProps) {
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const { user, localUser, role: userRole, assignedEventId } = useAuth();
-  const userEmail = (localUser?.email || user?.email || '').toLowerCase();
   const isVolunteer = userRole === 'Volunteer';
 
   useEffect(() => {
@@ -131,7 +130,7 @@ export function EventDetailScreen({ eventId }: EventDetailScreenProps) {
       } else {
         if (userRole === 'Organizer') {
           const isOwnerOrAssigned =
-            (fetchedEvent.createdBy && fetchedEvent.createdBy.toLowerCase() === userEmail) ||
+            isEventCreatedByUser(fetchedEvent.createdBy, user, localUser) ||
             fetchedEvent.id === assignedEventId;
 
           if (!isOwnerOrAssigned) {
@@ -159,7 +158,7 @@ export function EventDetailScreen({ eventId }: EventDetailScreenProps) {
     } finally {
       setLoading(false);
     }
-  }, [eventId, userRole, userEmail, assignedEventId]);
+  }, [eventId, userRole, user, localUser, assignedEventId]);
 
   useFocusEffect(
     useCallback(() => {

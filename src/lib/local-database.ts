@@ -43,6 +43,7 @@ async function migrateDatabase(database: SQLite.SQLiteDatabase): Promise<void> {
       academic_reference_year INTEGER NOT NULL CHECK (academic_reference_year BETWEEN 1900 AND 9999),
       status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'completed')),
       expected_attendees INTEGER NOT NULL DEFAULT 0 CHECK (expected_attendees >= 0),
+      created_by TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );

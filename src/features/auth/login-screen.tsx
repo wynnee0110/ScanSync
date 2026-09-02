@@ -256,9 +256,6 @@ export function LoginScreen() {
               </Text>
             </Pressable>
           </View>
-
-          {/* FOOTER */}
-          <Text style={styles.footerText}>ScanSync v1.0.0 • ICpEP.SE</Text>
         </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>
