@@ -60,7 +60,7 @@ class Config:
     # App
     app_env: str
     log_level: str
-    allowed_origin: str
+    allowed_origins: list[str]
 
     @property
     def is_development(self) -> bool:
@@ -68,6 +68,17 @@ class Config:
 
 
 def load_config() -> Config:
+    # Read allowed origins as a comma-separated string and split into a list.
+    # If not set, default to ["*"] for backward compatibility.
+    allowed_origins_str = _optional("ALLOWED_ORIGINS", "*")
+    # Split by comma, strip whitespace, and filter out empty strings.
+    allowed_origins_list = [
+        origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()
+    ]
+    # If the resulting list is empty, fall back to ["*"] to avoid blocking all origins.
+    if not allowed_origins_list:
+        allowed_origins_list = ["*"]
+
     return Config(
         supabase_url=_require("SUPABASE_URL"),
         supabase_service_role_key=_require("SUPABASE_SERVICE_ROLE_KEY"),
@@ -81,7 +92,7 @@ def load_config() -> Config:
         google_drive_shared_drive_id=_optional("GOOGLE_DRIVE_SHARED_DRIVE_ID"),
         app_env=_optional("APP_ENV", "production"),
         log_level=_optional("LOG_LEVEL", "info"),
-        allowed_origin=_optional("ALLOWED_ORIGIN", "*"),
+        allowed_origins=allowed_origins_list,
     )
 
 
