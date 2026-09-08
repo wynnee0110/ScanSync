@@ -232,6 +232,9 @@ def get_drive_service(config):
     """
     Returns an authenticated Google Drive API v3 service object.
     Supports oauth_user and service_account auth modes.
+
+    Service accounts have no personal storage quota and MUST upload to a
+    Shared Drive. Set GOOGLE_DRIVE_SHARED_DRIVE_ID in env to enable this.
     """
     try:
         import google.auth.transport.requests
@@ -243,7 +246,9 @@ def get_drive_service(config):
             "google-api-python-client is not installed. Run: pip install -r requirements.txt"
         ) from exc
 
-    SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+    # For Shared Drive uploads, drive.file scope is sufficient when the service
+    # account is a member of the Shared Drive. Use drive scope as fallback.
+    SCOPES = ["https://www.googleapis.com/auth/drive"]
 
     if config.drive_auth_mode == "service_account":
         sa_info = json.loads(config.google_service_account_json)
@@ -267,15 +272,27 @@ def get_drive_service(config):
     return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 
-def resolve_event_folder(service, root_folder_id: str, event_name: str, event_date: str) -> str:
+def resolve_event_folder(
+    service, root_folder_id: str, event_name: str, event_date: str, shared_drive_id: str = ""
+) -> str:
     """
     Finds or creates the event subfolder inside root_folder_id.
-    Checks if an event folder exists (by full display name or event name).
-    If it exists, reuses that folder. If not, creates it.
+    Supports both personal Drive and Shared Drives (required for service accounts).
+
+    When shared_drive_id is provided, all API calls include supportsAllDrives=True
+    and searches are scoped to that drive via corpora='drive'.
     """
     folder_display_name = f"{event_date} - {event_name}" if event_date else event_name
     escaped_display_name = folder_display_name.replace("'", "\\'")
     escaped_event_name = event_name.replace("'", "\\'")
+
+    # Build common kwargs for Shared Drive support
+    list_kwargs: dict = {"supportsAllDrives": True, "includeItemsFromAllDrives": True}
+    if shared_drive_id:
+        list_kwargs["corpora"] = "drive"
+        list_kwargs["driveId"] = shared_drive_id
+    else:
+        list_kwargs["spaces"] = "drive"
 
     # 1. Search for exact folder display name first
     query = (
@@ -284,7 +301,7 @@ def resolve_event_folder(service, root_folder_id: str, event_name: str, event_da
         f" and name = '{escaped_display_name}'"
         f" and trashed = false"
     )
-    result = service.files().list(q=query, fields="files(id, name)", spaces="drive").execute()
+    result = service.files().list(q=query, fields="files(id, name)", **list_kwargs).execute()
     existing = result.get("files", [])
 
     # 2. Fallback search: folder name containing event_name inside root_folder_id
@@ -295,7 +312,7 @@ def resolve_event_folder(service, root_folder_id: str, event_name: str, event_da
             f" and name contains '{escaped_event_name}'"
             f" and trashed = false"
         )
-        result = service.files().list(q=fallback_query, fields="files(id, name)", spaces="drive").execute()
+        result = service.files().list(q=fallback_query, fields="files(id, name)", **list_kwargs).execute()
         existing = result.get("files", [])
 
     if existing:
@@ -309,20 +326,23 @@ def resolve_event_folder(service, root_folder_id: str, event_name: str, event_da
         "mimeType": "application/vnd.google-apps.folder",
         "parents": [root_folder_id],
     }
-    folder = service.files().create(body=folder_meta, fields="id").execute()
+    folder = service.files().create(
+        body=folder_meta, fields="id", supportsAllDrives=True
+    ).execute()
     folder_id = folder["id"]
     logger.info("Created new Drive event folder id=%s (%s)", folder_id, folder_display_name)
     return folder_id
 
 
 def upload_csv(
-    service, csv_bytes: bytes, filename: str, folder_id: str
+    service, csv_bytes: bytes, filename: str, folder_id: str, shared_drive_id: str = ""
 ) -> dict:
     """
     Uploads csv_bytes to Drive folder_id.
     Checks if the CSV file exists inside the event folder.
     If it exists, edits/updates that file in-place.
     If not, creates the file.
+    Supports Shared Drives (required for service account uploads).
     Returns file metadata dict with 'id', 'webViewLink', 'size'.
     """
     from googleapiclient.http import MediaIoBaseUpload
@@ -332,14 +352,28 @@ def upload_csv(
     )
     escaped_filename = filename.replace("'", "\\'")
 
+    # Build common kwargs for Shared Drive support
+    list_kwargs: dict = {"supportsAllDrives": True, "includeItemsFromAllDrives": True}
+    if shared_drive_id:
+        list_kwargs["corpora"] = "drive"
+        list_kwargs["driveId"] = shared_drive_id
+
     # 1. Search for exact filename match inside the event folder
     query = f"'{folder_id}' in parents and name = '{escaped_filename}' and trashed = false"
-    existing = service.files().list(q=query, fields="files(id, name)").execute().get("files", [])
+    existing = service.files().list(
+        q=query, fields="files(id, name)", **list_kwargs
+    ).execute().get("files", [])
 
     # 2. Fallback search: any CSV file inside the event subfolder
     if not existing:
-        fallback_query = f"'{folder_id}' in parents and (mimeType = 'text/csv' or name contains '.csv') and trashed = false"
-        existing = service.files().list(q=fallback_query, fields="files(id, name)").execute().get("files", [])
+        fallback_query = (
+            f"'{folder_id}' in parents"
+            f" and (mimeType = 'text/csv' or name contains '.csv')"
+            f" and trashed = false"
+        )
+        existing = service.files().list(
+            q=fallback_query, fields="files(id, name)", **list_kwargs
+        ).execute().get("files", [])
 
     if existing:
         file_id = existing[0]["id"]
@@ -349,6 +383,7 @@ def upload_csv(
             body={"name": filename},
             media_body=media,
             fields="id, name, webViewLink, size",
+            supportsAllDrives=True,
         ).execute()
     else:
         logger.info("Creating new Drive CSV file: %s in folder id=%s", filename, folder_id)
@@ -356,6 +391,7 @@ def upload_csv(
             body={"name": filename, "parents": [folder_id]},
             media_body=media,
             fields="id, name, webViewLink, size",
+            supportsAllDrives=True,
         ).execute()
 
     return result
@@ -480,12 +516,17 @@ def run_csv_export(
     filename = f"{event_name} - Attendance.csv"
 
     # 5. Upload to Drive (with graceful fallback if Drive credentials fail/expire)
+    shared_drive_id = config.google_drive_shared_drive_id or ""
     try:
         drive = get_drive_service(config)
         folder_id = resolve_event_folder(
-            drive, config.drive_root_folder_id, event_name, event_date
+            drive, config.drive_root_folder_id, event_name, event_date,
+            shared_drive_id=shared_drive_id,
         )
-        file_info = upload_csv(drive, csv_bytes, filename, folder_id)
+        file_info = upload_csv(
+            drive, csv_bytes, filename, folder_id,
+            shared_drive_id=shared_drive_id,
+        )
         drive_file_id = file_info["id"]
         web_link = file_info.get("webViewLink", f"https://drive.google.com/file/d/{drive_file_id}/view")
     except Exception as drive_err:
