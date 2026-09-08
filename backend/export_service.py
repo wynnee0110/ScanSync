@@ -246,16 +246,16 @@ def get_drive_service(config):
             "google-api-python-client is not installed. Run: pip install -r requirements.txt"
         ) from exc
 
-    # For Shared Drive uploads, drive.file scope is sufficient when the service
-    # account is a member of the Shared Drive. Use drive scope as fallback.
-    SCOPES = ["https://www.googleapis.com/auth/drive"]
-
+    # oauth_user: use drive.file scope (matches the refresh token issued by get_oauth_token.py).
+    # service_account: use drive scope (required for Shared Drive membership access).
     if config.drive_auth_mode == "service_account":
+        SCOPES = ["https://www.googleapis.com/auth/drive"]
         sa_info = json.loads(config.google_service_account_json)
         creds = service_account.Credentials.from_service_account_info(
             sa_info, scopes=SCOPES
         )
     else:  # oauth_user
+        SCOPES = ["https://www.googleapis.com/auth/drive.file"]
         ref_token = config.google_oauth_refresh_token or ""
         logger.info("[Drive Auth] Initializing Google Credentials (token prefix: %s...)", ref_token[:12])
         creds = Credentials(
