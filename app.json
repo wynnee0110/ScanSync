@@ -8,7 +8,9 @@
     "scheme": "scansync",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/Logo.png"
+      "icon": "./assets/images/Logo.png",
+      "bundleIdentifier": "com.waynnee1.scansync",
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
@@ -48,7 +50,11 @@
       ],
       "expo-audio",
       "expo-asset",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

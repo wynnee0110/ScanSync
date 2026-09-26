@@ -10,6 +10,15 @@
 
 **Working tree before this documentation update:** clean
 
+## 2026-09-26 Expo SDK 57 upgrade & online JWT re-validation update
+
+- Upgraded application from Expo SDK 54 to Expo SDK 57 (`expo@^57.0.0`, `react-native@0.86.3`, `react@19.2.3`, `expo-router@~57.0.23`, `typescript@~6.0.3`).
+- Updated and aligned all 30 Expo native modules via `npx expo install --fix`, adding required config plugins to `app.json`.
+- Added `"dev": "expo start"` script to `package.json`.
+- Resolved React Native 0.86 and React 19 compiler compatibility issues (`ColorSchemeName` typing in `useTheme`, `StyleSheet.absoluteFill` in `AnimatedSplashOverlay`, and React Compiler lint rules in `eslint.config.js`).
+- Implemented automatic online JWT & session re-validation in `src/features/auth/auth-context.tsx`. Whenever device reconnects to internet or returns from mobile background (`AppState === 'active'`), token and active membership/volunteer status are validated against Supabase without disrupting offline usage.
+- Added proactive token refresh (`getValidAccessToken`) in `src/lib/supabase.ts`, preventing HTTP 401 token expiration errors in `operator-store.ts` and `sync-worker.ts`.
+
 ## 2026-09-02 operator revocation deletion & session eviction update
 
 - Fixed bug where revoking/deleting an operator did not purge the Supabase Auth user or kick the user out of the app.
@@ -53,8 +62,8 @@ The next development priority should be Supabase authentication and synchronizat
 
 | Area | Current choice |
 | --- | --- |
-| Mobile | Expo SDK 54, React Native 0.81.5, React 19.1, TypeScript 5.9 |
-| Navigation | Expo Router 6 |
+| Mobile | Expo SDK 57, React Native 0.86.3, React 19.2.3, TypeScript 6.0 |
+| Navigation | Expo Router 57 |
 | Native local data | `expo-sqlite` with WAL, foreign keys, and a durable mutation queue |
 | Web preview data | Browser storage through platform-specific adapters |
 | Scanner | `expo-camera` |

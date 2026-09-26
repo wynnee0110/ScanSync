@@ -10,12 +10,14 @@ import type { OperatorItem } from '@/features/operators/operator-types';
 type OperatorCardProps = {
   operator: OperatorItem;
   events: LocalEvent[];
+  canDelete?: boolean;
   onDelete: (id: string, name: string) => void;
 };
 
 export function OperatorCard({
   operator,
   events,
+  canDelete = false,
   onDelete,
 }: OperatorCardProps) {
   const access = getOperatorAccessStatus(operator, events);
@@ -105,7 +107,7 @@ export function OperatorCard({
       {/* Card Footer Actions */}
       <View style={styles.cardFooter}>
         <Text style={styles.scanCountText}>{operator.scansCount} scans recorded</Text>
-        {operator.role !== 'Superadmin' && (
+        {canDelete && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Remove operator ${operator.name}`}

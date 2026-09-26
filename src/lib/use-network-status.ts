@@ -1,4 +1,3 @@
-import * as Network from 'expo-network';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
@@ -8,42 +7,66 @@ export interface NetworkStatus {
   label: string;
 }
 
+export async function getNetworkStatusAsync(): Promise<NetworkStatus> {
+  if (Platform.OS === 'web') {
+    const online = typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean' ? navigator.onLine : true;
+    return {
+      isConnected: online,
+      connectionType: online ? 'ONLINE' : 'OFFLINE',
+      label: online ? 'Online' : 'Offline',
+    };
+  }
+
+  try {
+    const Network = await import('expo-network');
+    const state = await Network.getNetworkStateAsync();
+    const online = Boolean(state.isConnected && state.isInternetReachable !== false);
+    let connectionType: NetworkStatus['connectionType'] = online ? 'ONLINE' : 'OFFLINE';
+    let label = 'Online';
+
+    if (!online) {
+      label = 'Offline';
+    } else if (state.type === Network.NetworkStateType.WIFI) {
+      connectionType = 'WIFI';
+      label = 'Online (Wi-Fi)';
+    } else if (state.type === Network.NetworkStateType.CELLULAR) {
+      connectionType = 'CELLULAR';
+      label = 'Online (Cellular)';
+    }
+
+    return {
+      isConnected: online,
+      connectionType,
+      label,
+    };
+  } catch {
+    return {
+      isConnected: true,
+      connectionType: 'UNKNOWN',
+      label: 'Online',
+    };
+  }
+}
+
+export async function checkIsOnline(): Promise<boolean> {
+  const status = await getNetworkStatusAsync();
+  return status.isConnected;
+}
+
 export function useNetworkStatus(): NetworkStatus {
-  const [isConnected, setIsConnected] = useState<boolean>(true);
-  const [connectionType, setConnectionType] = useState<'WIFI' | 'CELLULAR' | 'ONLINE' | 'OFFLINE' | 'UNKNOWN'>('UNKNOWN');
+  const [status, setStatus] = useState<NetworkStatus>({
+    isConnected: true,
+    connectionType: 'UNKNOWN',
+    label: 'Online',
+  });
 
   useEffect(() => {
     let isMounted = true;
 
     async function checkNetwork() {
-      try {
-        if (Platform.OS === 'web') {
-          const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
-          if (isMounted) {
-            setIsConnected(online);
-            setConnectionType(online ? 'ONLINE' : 'OFFLINE');
-          }
-          return;
-        }
-
-        const state = await Network.getNetworkStateAsync();
-        if (isMounted) {
-          const online = Boolean(state.isConnected && state.isInternetReachable !== false);
-          setIsConnected(online);
-          if (state.type === Network.NetworkStateType.WIFI) {
-            setConnectionType('WIFI');
-          } else if (state.type === Network.NetworkStateType.CELLULAR) {
-            setConnectionType('CELLULAR');
-          } else {
-            setConnectionType(online ? 'ONLINE' : 'OFFLINE');
-          }
-        }
-      } catch {
-        if (isMounted) {
-          const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
-          setIsConnected(online);
-          setConnectionType(online ? 'ONLINE' : 'OFFLINE');
-        }
+      const nextStatus = await getNetworkStatusAsync();
+      if (isMounted) {
+        setStatus(nextStatus);
       }
     }
 
@@ -56,14 +79,20 @@ export function useNetworkStatus(): NetworkStatus {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const handleOnline = () => {
         if (isMounted) {
-          setIsConnected(true);
-          setConnectionType('ONLINE');
+          setStatus({
+            isConnected: true,
+            connectionType: 'ONLINE',
+            label: 'Online',
+          });
         }
       };
       const handleOffline = () => {
         if (isMounted) {
-          setIsConnected(false);
-          setConnectionType('OFFLINE');
+          setStatus({
+            isConnected: false,
+            connectionType: 'OFFLINE',
+            label: 'Offline',
+          });
         }
       };
 
@@ -84,20 +113,5 @@ export function useNetworkStatus(): NetworkStatus {
     };
   }, []);
 
-  let label = 'Online';
-  if (!isConnected) {
-    label = 'Offline';
-  } else if (connectionType === 'WIFI') {
-    label = 'Online (Wi-Fi)';
-  } else if (connectionType === 'CELLULAR') {
-    label = 'Online (Cellular)';
-  } else {
-    label = 'Online';
-  }
-
-  return {
-    isConnected,
-    connectionType,
-    label,
-  };
+  return status;
 }

@@ -115,3 +115,41 @@ export function requireSupabase(): SupabaseClient {
 
   return supabase;
 }
+
+/**
+ * Retrieves a valid, non-expired Supabase access token.
+ * If the current access token is expired or within 60 seconds of expiration,
+ * it proactively requests a session refresh before returning the token.
+ * Returns null if Supabase is unconfigured, user has no session, or refresh failed.
+ */
+export async function getValidAccessToken(): Promise<string | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session) return null;
+
+    const session = data.session;
+    // session.expires_at is in seconds (UNIX timestamp)
+    const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
+    const now = Date.now();
+
+    // If token has expired or will expire in less than 60 seconds, proactively refresh it
+    if (expiresAt && expiresAt - now < 60 * 1000) {
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (!refreshError && refreshData.session?.access_token) {
+        return refreshData.session.access_token;
+      }
+      // If refresh failed, fall back to current token only if it hasn't expired yet
+      if (expiresAt > now) {
+        return session.access_token;
+      }
+      return null;
+    }
+
+    return session.access_token;
+  } catch (err) {
+    console.warn('Failed to obtain valid access token:', err);
+    return null;
+  }
+}
+

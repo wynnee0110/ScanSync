@@ -8,7 +8,7 @@ import {
 import { syncOperatorsFromSupabase } from '@/features/operators/operator-store';
 import { requestCsvExport } from '@/lib/export-api';
 import { getPreference } from '@/lib/preferences';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { getValidAccessToken, isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
   listReadySyncOperations,
   markSyncOperationFailed,
@@ -553,8 +553,7 @@ export async function processSyncQueue(targetEventId?: string): Promise<SyncProc
   if (syncedEventIds.length > 0) {
     void (async () => {
       try {
-        const sessionRes = supabase ? await supabase.auth.getSession() : null;
-        const accessToken = sessionRes?.data?.session?.access_token || 'dev-operator-token';
+        const accessToken = (await getValidAccessToken()) || 'dev-operator-token';
 
         for (const eventId of syncedEventIds) {
           try {

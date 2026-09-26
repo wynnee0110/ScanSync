@@ -9,15 +9,16 @@
 
 import Constants from 'expo-constants';
 
+import { DEFAULT_ROOT_ICPEP_OPERATOR } from '@/features/operators/operator-helpers';
 import type { OperatorItem, OperatorRole } from '@/features/operators/operator-types';
 import { getPreference, setPreference } from '@/lib/preferences';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { getValidAccessToken, isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 export const OPERATORS_STORE_KEY = 'attendance_manager.operators_list';
 const PENDING_OPERATOR_IDS_KEY = 'attendance_manager.pending_operator_ids';
 
-// Module-scope mutable list — intentionally not React state.
-let _operators: OperatorItem[] = [];
+// Module-scope mutable list — seeded with root ICpEP superadmin.
+let _operators: OperatorItem[] = [DEFAULT_ROOT_ICPEP_OPERATOR];
 
 /** Subscribers notified whenever the list changes. */
 const _listeners = new Set<() => void>();
@@ -32,14 +33,22 @@ export async function loadStoredOperators(): Promise<OperatorItem[]> {
     const raw = await getPreference(OPERATORS_STORE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as OperatorItem[];
-      if (Array.isArray(parsed)) {
-        _operators = parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const hasSuperadmin = parsed.some(
+          (op) => op.role === 'Superadmin' || op.email?.toLowerCase() === 'operator@icpep.se',
+        );
+        _operators = hasSuperadmin ? parsed : [DEFAULT_ROOT_ICPEP_OPERATOR, ...parsed];
         _notify();
         return _operators;
       }
     }
   } catch {
     // Keep the in-memory snapshot when local storage is unavailable.
+  }
+  if (_operators.length === 0) {
+    _operators = [DEFAULT_ROOT_ICPEP_OPERATOR];
+    _notify();
+    void persistStoredOperators();
   }
   return _operators;
 }
@@ -75,9 +84,8 @@ export function getBackendUrl(): string {
 }
 
 async function getBackendAuthorizationHeaders(): Promise<Record<string, string>> {
-  if (!supabase) return {};
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {};
+  const token = await getValidAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 

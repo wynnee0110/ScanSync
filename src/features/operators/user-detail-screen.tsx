@@ -9,7 +9,9 @@ import { useAuth } from '@/features/auth/auth-context';
 import { listEvents } from '@/features/events/event-repository';
 import { isEventCreatedByUser, type LocalEvent } from '@/features/events/event-types';
 import {
+  canDeleteOperator,
   getOperatorAccessStatus,
+  isSuperadmin,
   MOCK_OPERATOR_LOGS,
   type OperatorActivityLog,
 } from '@/features/operators/operator-helpers';
@@ -18,7 +20,9 @@ import { getOperators, removeOperator, subscribeOperators, updateOperator } from
 export function UserDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, localUser, role: userRole, assignedEventId: userAssignedEventId } = useAuth();
-  const isOrganizerViewer = userRole === 'Organizer';
+  const userEmail = (localUser?.email || user?.email || '').toLowerCase();
+  const isSuperadminViewer = isSuperadmin(userRole, userEmail);
+  const isOrganizerViewer = userRole === 'Organizer' && !isSuperadminViewer;
 
   const [showPassword, setShowPassword] = useState(false);
   const [events, setEvents] = useState<LocalEvent[]>([]);
@@ -26,7 +30,7 @@ export function UserDetailScreen() {
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
 
   useEffect(() => {
-    void listEvents().then(setEvents).catch(() => {});
+    void listEvents().then(setEvents).catch(() => { });
     const unsub = subscribeOperators(() => {
       setOperators([...getOperators()]);
     });
@@ -77,10 +81,18 @@ export function UserDetailScreen() {
   const access = operator ? getOperatorAccessStatus(operator, events) : { label: 'UNASSIGNED', isRevoked: true, color: '#6B7280', bgColor: '#F3F4F6' };
   const activityLogs: OperatorActivityLog[] = (operator && MOCK_OPERATOR_LOGS[operator.id]) ?? [];
 
+  const deletionCheck = operator
+    ? canDeleteOperator(
+        { id: localUser?.id || user?.id, email: userEmail, role: userRole },
+        operator,
+      )
+    : { allowed: false, reason: 'Operator not found' };
+
   const handleRevokeAccess = () => {
     if (!operator) return;
-    if (operator.role === 'Superadmin') {
-      Alert.alert('Action Restricted', 'Superadmin accounts cannot be revoked.');
+
+    if (!deletionCheck.allowed) {
+      Alert.alert('Action Restricted', deletionCheck.reason || 'You do not have permission to revoke this account.');
       return;
     }
 
@@ -96,7 +108,7 @@ export function UserDetailScreen() {
 
     Alert.alert(
       'Revoke Access',
-      `Are you sure you want to revoke access for ${operator.name}?`,
+      `Are you sure you want to revoke access for ${operator.name}? This will remove the operator's account and all permissions.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -269,7 +281,7 @@ export function UserDetailScreen() {
         </View>
 
         {/* Revoke Access Button */}
-        {operator.role !== 'Superadmin' && (
+        {deletionCheck.allowed && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Revoke user access"

@@ -8,6 +8,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Palette } from '@/constants/palette';
 import { useAuth } from '@/features/auth/auth-context';
 
+const EMAIL_ADDRESS = "icpepse@ustp.edu.ph"
+
+
 function Row({
   icon,
   iconBackground,
@@ -62,12 +65,12 @@ export function ProfileScreen() {
 
   const displayInitials = userName
     ? userName
-        .trim()
-        .split(/\s+/)
-        .map((part) => part[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase()
+      .trim()
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase()
     : 'OP';
 
 
@@ -79,8 +82,8 @@ export function ProfileScreen() {
 
   const handleHelpSupport = () => {
     Alert.alert(
-      'ICpEP.SE Support',
-      'For assistance or account management, contact your Lead Superadmin or email support@icpep.org.',
+      'ICpEP.SE ScanSync Support',
+      `For assistance or account management, contact your Lead Superadmin or email: ${EMAIL_ADDRESS}`,
       [{ text: 'OK' }],
     );
   };

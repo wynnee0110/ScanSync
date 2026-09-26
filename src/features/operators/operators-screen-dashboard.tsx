@@ -12,8 +12,10 @@ import { isEventCreatedByUser, type LocalEvent } from '@/features/events/event-t
 import { AddOperatorModal } from '@/features/operators/add-operator-modal';
 import { OperatorCard } from '@/features/operators/operator-card';
 import {
+  canDeleteOperator,
   generateAccessCode,
   getOperatorAccessStatus,
+  isSuperadmin,
 } from '@/features/operators/operator-helpers';
 import {
   addOperator,
@@ -39,8 +41,9 @@ export default function OperatorsScreenDashboard() {
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  const isVolunteerViewer = userRole === 'Volunteer';
-  const isOrganizerViewer = userRole === 'Organizer';
+  const isSuperadminViewer = isSuperadmin(userRole, userEmail);
+  const isVolunteerViewer = userRole === 'Volunteer' && !isSuperadminViewer;
+  const isOrganizerViewer = userRole === 'Organizer' && !isSuperadminViewer;
 
   const organizerEvents = events.filter(
     (e) =>
@@ -227,16 +230,23 @@ export default function OperatorsScreenDashboard() {
 
   const handleDeleteOperator = (id: string, name: string) => {
     const targetOp = operators.find((op) => op.id === id);
-    if (targetOp?.role === 'Superadmin') {
-      Alert.alert('Action Restricted', 'Superadmin accounts cannot be removed or revoked.');
+    if (!targetOp) return;
+
+    const deletionCheck = canDeleteOperator(
+      { id: localUser?.id || user?.id, email: userEmail, role: userRole },
+      targetOp,
+    );
+
+    if (!deletionCheck.allowed) {
+      Alert.alert('Action Restricted', deletionCheck.reason || 'You do not have permission to delete this account.');
       return;
     }
 
     if (isOrganizerViewer) {
       const organizerEventIds = new Set(organizerEvents.map((e) => e.id));
-      const isCreatedByMe = isEventCreatedByUser(targetOp?.createdBy, user, localUser);
-      const isAssignedToMyEvent = Boolean(targetOp?.assignedEventId && organizerEventIds.has(targetOp.assignedEventId));
-      if (targetOp?.role !== 'Volunteer' || (!isCreatedByMe && !isAssignedToMyEvent)) {
+      const isCreatedByMe = isEventCreatedByUser(targetOp.createdBy, user, localUser);
+      const isAssignedToMyEvent = Boolean(targetOp.assignedEventId && organizerEventIds.has(targetOp.assignedEventId));
+      if (targetOp.role !== 'Volunteer' || (!isCreatedByMe && !isAssignedToMyEvent)) {
         Alert.alert('Action Restricted', 'Organizers can only manage Volunteers assigned to their events.');
         return;
       }
@@ -415,14 +425,21 @@ export default function OperatorsScreenDashboard() {
             </Text>
           </View>
         ) : (
-          filteredOperators.map((op) => (
-            <OperatorCard
-              key={op.id}
-              operator={op}
-              events={events}
-              onDelete={handleDeleteOperator}
-            />
-          ))
+          filteredOperators.map((op) => {
+            const canDelete = canDeleteOperator(
+              { id: localUser?.id || user?.id, email: userEmail, role: userRole },
+              op,
+            ).allowed;
+            return (
+              <OperatorCard
+                key={op.id}
+                operator={op}
+                events={events}
+                canDelete={canDelete}
+                onDelete={handleDeleteOperator}
+              />
+            );
+          })
         )}
       </ScrollView>
 
