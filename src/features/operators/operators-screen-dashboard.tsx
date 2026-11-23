@@ -156,6 +156,14 @@ export default function OperatorsScreenDashboard() {
       return;
     }
 
+    if (formPassword.trim().length > 0 && formPassword.trim().length < 6) {
+      Alert.alert(
+        'Validation Error',
+        'Access password must be at least 6 characters (or leave blank to auto-generate).',
+      );
+      return;
+    }
+
     let assignedEventName = 'All Events (Superadmin)';
     let finalEventId = formEventId;
 

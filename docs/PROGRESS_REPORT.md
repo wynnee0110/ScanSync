@@ -10,6 +10,24 @@
 
 **Working tree before this documentation update:** clean
 
+## 2026-11-23 Backend ES256 JWKS auth, operator creation, and keep-alive fixes
+
+- Added asymmetric `ES256`/`RS256` JWKS verification with a 10-minute in-memory cache (`_fetch_jwks` against `/auth/v1/.well-known/jwks.json`) alongside `HS256` in `backend/auth.py`, and restricted dev auth fallback strictly to explicit `APP_ENV=development` + `ALLOW_DEV_AUTH=true`.
+- Fixed operator creation in `backend/operator_service.py` and `backend/main.py` (`POST /api/operators`): enforced `get_current_user_id` + role authorization, required non-empty name/email and minimum 6-character password (`400 Bad Request` on validation failure), aborted instead of falling through with synthetic UUIDs when Supabase Auth `create_user` fails, raised on `profiles`/`event_volunteers` upsert errors, and sanitized `assigned_by` UUID selection.
+- Updated `_self_ping_loop` in `backend/main.py` to ping `RENDER_EXTERNAL_URL` when set and skip self-pinging locally.
+- Updated `AddOperatorModal`, `OperatorsScreenDashboard`, and `operator-store.ts` to validate the 6-character minimum password client-side, avoid client-SDK fallback on backend 4xx validation rejections, and extend Render fetch timeouts (`10s`/`15s`).
+- Added focused backend unit tests in `backend/test_backend.py` covering HS256, ES256 JWKS, operator validation, and `/api/operators` error responses.
+
+## 2026-11-22 Backend cloud redeployment, permanent Google OAuth & CORS update
+
+- Replaced suspended Render backend with freshly automated Web Service (`scansync-api-8342.onrender.com`).
+- Resolved Google OAuth refresh token expiration by migrating OAuth consent screen to Production and minting a permanent refresh token with `drive.file` scope. Tested mock attendance export to Google Drive end-to-end with verified folder creation and CSV upload.
+- Resolved PostgREST connectivity on Supabase cloud (`xhzprnpnilcosunfaqaj.supabase.co`) returning 200 OK.
+- Fixed CORS rejection (`HTTP 400 Disallowed CORS origin`) by updating Render environment configuration with `ALLOWED_ORIGINS=*`.
+- Updated `eas.json` across `development`, `preview`, and `production` profiles to point to `https://scansync-api-8342.onrender.com`.
+- Added automated Render deployment script in `backend/scripts/deploy_to_render.py` and Render blueprint in `render.yaml`.
+- Verified test suite: 7/7 test suites (50/50 tests) passing and 0 TypeScript compilation errors.
+
 ## 2026-09-26 Expo SDK 57 upgrade & online JWT re-validation update
 
 - Upgraded application from Expo SDK 54 to Expo SDK 57 (`expo@^57.0.0`, `react-native@0.86.3`, `react@19.2.3`, `expo-router@~57.0.23`, `typescript@~6.0.3`).

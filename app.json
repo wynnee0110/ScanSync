@@ -19,9 +19,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.CAMERA"
       ],
       "package": "com.waynnee1.scansync"
     },
@@ -65,6 +63,12 @@
       "eas": {
         "projectId": "6f727e7d-d075-442b-801f-20b6ad675e96"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6f727e7d-d075-442b-801f-20b6ad675e96"
     }
   }
 }

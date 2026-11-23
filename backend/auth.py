@@ -20,13 +20,15 @@ Usage in route handlers:
 
 import logging
 import os
+import time
 from typing import Annotated
 
+import httpx
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 try:
-    from jose import JWTError, jwt
+    from jose import JWTError, jwk, jwt
     from jose.exceptions import ExpiredSignatureError
 except ImportError as exc:
     raise ImportError(
@@ -43,11 +45,54 @@ logger = logging.getLogger(__name__)
 _bearer = HTTPBearer(auto_error=True)
 
 ALGORITHM = "HS256"
+ASYMMETRIC_ALGORITHMS = {"ES256", "ES384", "ES512", "RS256", "RS384", "RS512"}
+JWKS_CACHE_TTL_SECONDS = 600.0
+_jwks_cache: dict[str, tuple[float, list[dict]]] = {}
 
 
-def verify_supabase_token(token: str, jwt_secret: str) -> dict:
+def _fetch_jwks(supabase_url: str, force_refresh: bool = False) -> list[dict]:
+    """Fetches and caches public JWKS keys from Supabase Auth."""
+    base_url = supabase_url.strip().rstrip("/")
+    if not base_url:
+        return []
+
+    now = time.monotonic()
+    cached = _jwks_cache.get(base_url)
+    if not force_refresh and cached is not None:
+        fetched_at, keys = cached
+        if now - fetched_at < JWKS_CACHE_TTL_SECONDS:
+            return keys
+
+    jwks_url = f"{base_url}/auth/v1/.well-known/jwks.json"
+    response = httpx.get(jwks_url, timeout=10.0)
+    response.raise_for_status()
+    payload = response.json()
+    keys = payload.get("keys") if isinstance(payload, dict) else None
+    if not isinstance(keys, list):
+        return []
+
+    _jwks_cache[base_url] = (now, keys)
+    return keys
+
+
+def _select_jwk(keys: list[dict], kid: str | None) -> dict | None:
+    if kid:
+        for key in keys:
+            if isinstance(key, dict) and key.get("kid") == kid:
+                return key
+        return None
+    if len(keys) == 1 and isinstance(keys[0], dict):
+        return keys[0]
+    return None
+
+
+def verify_supabase_token(
+    token: str,
+    jwt_secret: str,
+    supabase_url: str | None = None,
+) -> dict:
     """
-    Decodes and verifies a Supabase-issued JWT.
+    Decodes and verifies a Supabase-issued JWT (HS256 or asymmetric JWKS such as ES256).
     Raises HTTPException(401) on any failure.
 
     Supabase JWTs carry:
@@ -56,21 +101,84 @@ def verify_supabase_token(token: str, jwt_secret: str) -> dict:
       - aud: "authenticated"
       - exp: expiry timestamp
     """
+    alg = ALGORITHM
+    kid: str | None = None
     try:
-        payload = jwt.decode(
-            token,
-            jwt_secret,
-            algorithms=[ALGORITHM],
-            audience="authenticated",
-            options={"verify_at_hash": False},
+        header = jwt.get_unverified_header(token)
+        if isinstance(header, dict):
+            alg = str(header.get("alg") or ALGORITHM)
+            raw_kid = header.get("kid")
+            kid = str(raw_kid) if raw_kid else None
+    except JWTError as exc:
+        logger.warning("JWT verification failed (alg=%s): %s", alg, type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token.",
         )
+
+    try:
+        if alg == ALGORITHM:
+            payload = jwt.decode(
+                token,
+                jwt_secret,
+                algorithms=[ALGORITHM],
+                audience="authenticated",
+                options={"verify_at_hash": False},
+            )
+        elif alg in ASYMMETRIC_ALGORITHMS:
+            resolved_url = (supabase_url or os.environ.get("SUPABASE_URL") or "").strip()
+            if not resolved_url:
+                logger.warning("JWT verification failed (alg=%s): missing SUPABASE_URL", alg)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication token.",
+                )
+
+            try:
+                keys = _fetch_jwks(resolved_url, force_refresh=False)
+                matching_key = _select_jwk(keys, kid)
+                if matching_key is None:
+                    keys = _fetch_jwks(resolved_url, force_refresh=True)
+                    matching_key = _select_jwk(keys, kid)
+            except HTTPException:
+                raise
+            except Exception as exc:
+                logger.warning("JWT verification failed (alg=%s): %s", alg, type(exc).__name__)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication token.",
+                )
+
+            if matching_key is None:
+                logger.warning("JWT verification failed (alg=%s): matching JWK not found", alg)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication token.",
+                )
+
+            verification_key = jwk.construct(matching_key, algorithm=alg)
+            payload = jwt.decode(
+                token,
+                verification_key,
+                algorithms=[alg],
+                audience="authenticated",
+                options={"verify_at_hash": False},
+            )
+        else:
+            logger.warning("JWT verification failed (alg=%s): unsupported algorithm", alg)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unsupported authentication token algorithm.",
+            )
     except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired. Please sign in again.",
         )
+    except HTTPException:
+        raise
     except JWTError as exc:
-        logger.debug("JWT verification notice: %s", type(exc).__name__)
+        logger.warning("JWT verification failed (alg=%s): %s", alg, type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token.",
@@ -93,26 +201,32 @@ async def get_current_user_id(
     """
     FastAPI dependency. Extracts and verifies the caller's Supabase JWT.
     Returns the verified user UUID string.
-    In development / mock-login mode, accepts dev tokens and falls back safely to the active dev operator ID.
+    Dev fallback is only allowed when running in development with ALLOW_DEV_AUTH enabled.
     """
     token = credentials.credentials or ""
+    dev_fallback_allowed = (
+        config.is_development
+        and os.environ.get("ALLOW_DEV_AUTH", "false").lower() in ("true", "1")
+    )
 
-    # If real JWT (3 parts separated by dots), verify with Supabase secret
+    # If real JWT (3 parts separated by dots), verify with Supabase secret or JWKS
     if token and len(token.split(".")) == 3:
         try:
-            result = verify_supabase_token(token, config.supabase_jwt_secret)
+            result = verify_supabase_token(
+                token,
+                config.supabase_jwt_secret,
+                config.supabase_url,
+            )
             return result["user_id"]
         except HTTPException:
-            if config.is_development or os.environ.get("ALLOW_DEV_AUTH", "true").lower() in ("true", "1"):
+            if dev_fallback_allowed:
                 logger.info("JWT verification failed, applying dev authentication fallback.")
                 return "46d78253-c007-4b45-b93e-0f2f21cbb123"
             raise
 
     # Fallback for dev/mock tokens (e.g. 'dev-operator-token')
-    if (
-        config.is_development
-        or os.environ.get("ALLOW_DEV_AUTH", "true").lower() in ("true", "1")
-        or token.startswith("dev-")
+    if dev_fallback_allowed and (
+        token.startswith("dev-")
         or token == "mock-jwt-token"
         or token == "null"
         or not token

@@ -166,10 +166,10 @@ export async function syncOperatorsFromSupabase(): Promise<void> {
   await loadStoredOperators();
   const pendingIds = await getPendingOperatorIds();
   const backendUrl = getBackendUrl();
-  // 1. Try server backend API endpoint first with a 1.5s timeout
+  // 1. Try server backend API endpoint first with a 10s timeout
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(`${backendUrl}/api/operators`, {
       headers: await getBackendAuthorizationHeaders(),
       signal: controller.signal,
@@ -279,7 +279,7 @@ export async function saveOperatorToSupabase(op: OperatorItem): Promise<boolean>
   //    creates the Auth user with email_confirm:true (no confirmation email needed).
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     const res = await fetch(`${backendUrl}/api/operators`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await getBackendAuthorizationHeaders()) },
@@ -299,7 +299,18 @@ export async function saveOperatorToSupabase(op: OperatorItem): Promise<boolean>
     if (res.ok) {
       return true;
     }
-    // Non-2xx but the request reached the server — log for diagnostics
+    if (res.status >= 400 && res.status < 500) {
+      let detail = '';
+      try {
+        const errBody = (await res.json()) as { detail?: string };
+        detail = errBody.detail ?? '';
+      } catch {
+        // Ignore JSON parse error on error body
+      }
+      console.warn('[OperatorStore] Backend POST /api/operators rejected:', res.status, detail);
+      return false;
+    }
+    // Non-2xx (5xx) — log for diagnostics and fall back below
     console.warn('[OperatorStore] Backend POST /api/operators returned', res.status);
   } catch (err) {
     // Network failure (timeout, offline, etc.) — fall through to client SDK

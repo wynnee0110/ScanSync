@@ -5,9 +5,21 @@ Privileged backend service for fetching, creating, and revoking operators in Sup
 """
 
 import logging
+import uuid
 from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
+
+
+def _is_valid_uuid(value: str | None) -> bool:
+    """Returns True when value is a valid UUID string."""
+    if not value:
+        return False
+    try:
+        uuid.UUID(str(value).strip())
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 
 def _get_supabase_client(config):
@@ -146,57 +158,74 @@ def fetch_all_operators(
 
 
 
-def create_or_update_operator(config, data: Dict[str, Any]) -> Dict[str, Any]:
-    import uuid
+def create_or_update_operator(
+    config,
+    data: Dict[str, Any],
+    actor_id: str | None = None,
+) -> Dict[str, Any]:
     client = _get_supabase_client(config)
-    user_id = data.get("id") or str(uuid.uuid4())
-    email = data["email"]
-    name = data["name"]
-    role = data["role"]
-    access_code = data.get("password") or data.get("generatedPasswordCode") or "VOL-4821"
+    email = (data.get("email") or "").strip().lower()
+    name = (data.get("name") or "").strip()
+    role = (data.get("role") or "").strip()
+    if not name:
+        raise ValueError("Operator name is required.")
+    if not email or "@" not in email:
+        raise ValueError("A valid operator email is required.")
+
+    access_code = (data.get("password") or data.get("generatedPasswordCode") or "").strip() or "VOL-4821"
+    if len(access_code) < 6:
+        raise ValueError("Password must be at least 6 characters.")
+
     assigned_event_id = data.get("assignedEventId")
     created_by = data.get("createdBy")
 
-    auth_user_id = None
+    if actor_id:
+        actor_memberships = (
+            client.table("memberships")
+            .select("role")
+            .eq("user_id", actor_id)
+            .execute()
+            .data
+            or []
+        )
+        actor_roles = {m.get("role") for m in actor_memberships}
+        if "superadmin" in actor_roles:
+            pass
+        elif "organizer" in actor_roles:
+            if role != "Volunteer":
+                raise PermissionError("Organizers can only manage Volunteer accounts.")
+        else:
+            raise PermissionError("Operator management requires superadmin or organizer access.")
+
+    auth_user_id: str | None = None
+    create_err: Exception | None = None
     # 1. Create or lookup user in Supabase Auth via Service Role Admin API
     try:
-        auth_res = None
-        try:
-            auth_res = client.auth.admin.create_user({
-                "email": email,
-                "password": access_code,
-                "email_confirm": True,
-                "user_metadata": {
-                    "full_name": name,
-                    "role": role,
-                    "access_code": access_code,
-                    "created_by": created_by,
-                    "assigned_event_id": assigned_event_id,
-                },
-            })
-        except Exception as dict_err:
-            logger.info("Dict create_user notice, trying kwarg create_user: %s", dict_err)
-            auth_res = client.auth.admin.create_user(
-                email=email,
-                password=access_code,
-                email_confirm=True,
-                user_metadata={
-                    "full_name": name,
-                    "role": role,
-                    "access_code": access_code,
-                    "created_by": created_by,
-                    "assigned_event_id": assigned_event_id,
-                },
-            )
-
+        auth_res = client.auth.admin.create_user({
+            "email": email,
+            "password": access_code,
+            "email_confirm": True,
+            "user_metadata": {
+                "full_name": name,
+                "role": role,
+                "access_code": access_code,
+                "created_by": created_by,
+                "assigned_event_id": assigned_event_id,
+            },
+        })
         if auth_res:
             if hasattr(auth_res, "user") and auth_res.user and hasattr(auth_res.user, "id"):
                 auth_user_id = str(auth_res.user.id)
             elif hasattr(auth_res, "id") and auth_res.id:
                 auth_user_id = str(auth_res.id)
             elif isinstance(auth_res, dict):
-                auth_user_id = auth_res.get("id") or (auth_res.get("user", {}).get("id") if isinstance(auth_res.get("user"), dict) else None)
+                auth_user_id = auth_res.get("id") or (
+                    auth_res.get("user", {}).get("id")
+                    if isinstance(auth_res.get("user"), dict)
+                    else None
+                )
     except Exception as exc:
+        create_err = exc
         logger.info("Notice create_user in Supabase Auth (user may already exist): %s", exc)
 
     if not auth_user_id:
@@ -205,7 +234,7 @@ def create_or_update_operator(config, data: Dict[str, Any]) -> Dict[str, Any]:
             users_list = users_resp if isinstance(users_resp, list) else getattr(users_resp, "users", [])
             for u in users_list:
                 u_email = getattr(u, "email", "") or (u.get("email") if isinstance(u, dict) else "")
-                if u_email and u_email.lower() == email.lower():
+                if u_email and u_email.lower() == email:
                     auth_user_id = str(getattr(u, "id", "") or (u.get("id") if isinstance(u, dict) else ""))
                     try:
                         client.auth.admin.update_user_by_id(auth_user_id, {
@@ -224,8 +253,12 @@ def create_or_update_operator(config, data: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as e2:
             logger.warning("Notice listing auth users: %s", e2)
 
-    if auth_user_id:
-        user_id = auth_user_id
+    if not auth_user_id:
+        raise ValueError(
+            f"Could not create operator account in Supabase Auth: {create_err or 'missing Auth user ID'}"
+        ) from create_err
+
+    user_id = auth_user_id
 
     # 2. Upsert profile fields (email, access_code, full_name) with official Auth user_id
     try:
@@ -236,7 +269,7 @@ def create_or_update_operator(config, data: Dict[str, Any]) -> Dict[str, Any]:
             "access_code": access_code,
         }, on_conflict="id").execute()
     except Exception as e:
-        logger.warning("Notice profiles upsert: %s", e)
+        raise RuntimeError("Could not save operator profile") from e
 
 
     # Resolve the organization for memberships, creating the initial one after
@@ -274,15 +307,20 @@ def create_or_update_operator(config, data: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as e:
             raise RuntimeError("Could not assign the operator role") from e
     elif role == "Volunteer" and assigned_event_id:
+        assigned_by = (
+            actor_id
+            if _is_valid_uuid(actor_id)
+            else (created_by if _is_valid_uuid(created_by) else user_id)
+        )
         try:
             client.table("event_volunteers").upsert({
                 "event_id": assigned_event_id,
                 "user_id": user_id,
-                "assigned_by": created_by or user_id,
+                "assigned_by": assigned_by,
                 "valid_until": valid_until_iso,
             }, on_conflict="event_id,user_id").execute()
         except Exception as e:
-            logger.warning("Notice volunteer assignment upsert: %s", e)
+            raise RuntimeError("Could not assign volunteer to event") from e
 
     return {"status": "ok", "id": user_id}
 

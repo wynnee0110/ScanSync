@@ -18,6 +18,7 @@ Dev health check:
 
 import asyncio
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -61,8 +62,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 async def _self_ping_loop():
     """Background task that pings the Render service every 10 minutes to prevent sleep."""
+    base_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+    if not base_url:
+        logger.info("[Keep-Alive] RENDER_EXTERNAL_URL not set; skipping self-ping loop.")
+        return
+
     await asyncio.sleep(15)  # Wait 15s after startup before first ping
-    url = "https://scansync-lius.onrender.com/health"
+    url = f"{base_url}/health"
     async with httpx.AsyncClient(timeout=10.0) as client:
         while True:
             try:
@@ -227,9 +233,17 @@ def get_operators(
 
 
 @app.post("/api/operators", tags=["Operators"])
-def save_operator(body: OperatorPayload, config: Annotated[Config, Depends(get_config)]):
+def save_operator(
+    body: OperatorPayload,
+    user_id: Annotated[str, Depends(get_current_user_id)],
+    config: Annotated[Config, Depends(get_config)],
+):
     try:
-        return create_or_update_operator(config, body.model_dump())
+        return create_or_update_operator(config, body.model_dump(), actor_id=user_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Error in POST /api/operators")
         raise HTTPException(

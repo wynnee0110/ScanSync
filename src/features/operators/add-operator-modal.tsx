@@ -98,10 +98,10 @@ export function AddOperatorModal({
             />
 
             {/* Field: Password / Access Code */}
-            <Text style={styles.inputLabel}>Access Password / Code *</Text>
+            <Text style={styles.inputLabel}>Access Password / Code (min 6 chars)</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="e.g. Password123 or VOL-4821"
+              placeholder="e.g. Password123 or leave blank to auto-generate"
               placeholderTextColor={Palette.textSecondary}
               autoCapitalize="none"
               value={formPassword}
